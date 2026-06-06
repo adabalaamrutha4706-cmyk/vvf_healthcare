@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8fafc;
+  --foreground: #0f172a;
 }
 
 @theme inline {
@@ -10,17 +10,39 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --color-primary-green: #047857;
+  --color-primary-green-hover: #065f46;
+  --color-very-light-green: #ecfdf5;
+  --color-light-green: #a7f3d0;
+  --color-secondary-bg: #f8fafc;
+  --color-secondary-text: #64748b;
+  --color-secondary-slate: #64748b;
+  --color-primary-text: #0f172a;
+  --color-border-gray: #e2e8f0;
+  --color-alert-bg: #fef2f2;
+  --color-alert-text: #b91c1c;
+  --color-alert-border: #fecaca;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  overflow-x: hidden;
+  max-width: 100%;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+/* Keep dashboard cards and content panels inside the mobile viewport */
+@layer utilities {
+  .mobile-contained {
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
 }
