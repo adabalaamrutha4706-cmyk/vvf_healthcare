@@ -10,6 +10,7 @@ import {
   ChevronRight, WifiOff, AlertTriangle, ShieldCheck, RotateCcw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { SelectField } from '../../components/SelectField';
 
 export function CountdownTimer({ expiresAt }: { expiresAt: string }) {
   const [timeLeft, setTimeLeft] = useState('');
@@ -1140,23 +1141,25 @@ export default function VisitsPage() {
           
           {/* Column 1 & 2: Visits history table list */}
           <div className="lg:col-span-2 bg-white border border-border-gray rounded-xl sm:rounded-2xl overflow-hidden flex flex-col min-h-[400px]">
-            <div className="px-6 py-4 border-b border-border-gray bg-white/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="px-4 sm:px-6 py-4 border-b border-border-gray bg-white/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 min-w-0">
               <h3 className="font-bold text-xs text-primary-text uppercase tracking-wider">All Field Visits Log</h3>
-              <select
+              <SelectField
                 id="filter-visit-status"
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="bg-white border border-border-gray rounded-xl px-3 py-1.5 text-xs text-secondary-text outline-none focus:border-primary-green cursor-pointer"
-              >
-                <option value="All">All Statuses</option>
-                <option value="Checked In">Checked In</option>
-                <option value="Partially Completed">Partially Completed</option>
-                <option value="Completed">Completed</option>
-                <option value="Verified">Verified</option>
-                <option value="Expired">Expired</option>
-                <option value="Revisit Required">Revisit Required</option>
-                <option value="Cancelled">Cancelled</option>
-              </select>
+                onChange={setStatusFilter}
+                className="w-full sm:w-48"
+                triggerClassName="py-1.5 text-xs text-secondary-text"
+                options={[
+                  { value: 'All', label: 'All Statuses' },
+                  { value: 'Checked In', label: 'Checked In' },
+                  { value: 'Partially Completed', label: 'Partially Completed' },
+                  { value: 'Completed', label: 'Completed' },
+                  { value: 'Verified', label: 'Verified' },
+                  { value: 'Expired', label: 'Expired' },
+                  { value: 'Revisit Required', label: 'Revisit Required' },
+                  { value: 'Cancelled', label: 'Cancelled' },
+                ]}
+              />
             </div>
 
             {loading ? (
@@ -1521,18 +1524,19 @@ export default function VisitsPage() {
                       {/* Hospital selector */}
                       <div>
                         <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Select Clinic to Inspect</label>
-                        <select
+                        <SelectField
                           value={adminSelectedHospitalId}
-                          onChange={(e) => setAdminSelectedHospitalId(e.target.value)}
-                          className="w-full bg-white border border-border-gray rounded-xl px-3 py-2 text-xs text-primary-text outline-none focus:border-primary-green cursor-pointer"
-                        >
-                          <option value="">-- Choose Hospital --</option>
-                          {hospitals.map(h => (
-                            <option key={h.id} value={h.id}>
-                              🏥 {h.name} ({h.hospital_uid || 'UID Pending'} - {h.city})
-                            </option>
-                          ))}
-                        </select>
+                          onChange={setAdminSelectedHospitalId}
+                          triggerClassName="py-2 text-xs"
+                          placeholder="-- Choose Hospital --"
+                          options={[
+                            { value: '', label: '-- Choose Hospital --' },
+                            ...hospitals.map((h) => ({
+                              value: String(h.id),
+                              label: `🏥 ${h.name} (${h.hospital_uid || 'UID Pending'} - ${h.city})`,
+                            })),
+                          ]}
+                        />
                       </div>
 
                       {/* Control Button */}
@@ -1692,7 +1696,7 @@ export default function VisitsPage() {
                       <span>{gpsStatus}</span>
                     </div>
                   )}
-                  <div className="relative">
+                  <div className="relative min-w-0 max-w-full">
                     <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Select Partner Hospital</label>
                     
                     {/* Dropdown Trigger */}
@@ -1727,7 +1731,7 @@ export default function VisitsPage() {
                           className="fixed inset-0 z-40" 
                           onClick={() => setIsHospDropdownOpen(false)}
                         />
-                        <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-border-gray rounded-xl shadow-xl overflow-hidden flex flex-col max-h-60">
+                        <div className="absolute z-50 left-0 right-0 mt-1 w-full max-w-full min-w-0 bg-white border border-border-gray rounded-xl shadow-xl overflow-hidden flex flex-col max-h-60">
                           {/* Search Input */}
                           <div className="p-2 border-b border-border-gray bg-white">
                             <input

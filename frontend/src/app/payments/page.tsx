@@ -11,6 +11,7 @@ import {
   TrendingUp, Sparkles, FileText, Download, ShieldAlert, Printer, Lock, Unlock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { SelectField } from '../../components/SelectField';
 
 export default function PaymentsPage() {
   const { user } = useAuth();
@@ -348,7 +349,7 @@ export default function PaymentsPage() {
         </div>
 
         {/* Search & Filter - Hidden in Print */}
-        <div className="grid grid-cols-1 gap-2 bg-white border border-border-gray p-3 rounded-xl no-print">
+        <div className="grid grid-cols-1 gap-2 bg-white border border-border-gray p-3 rounded-xl no-print max-w-full min-w-0 overflow-hidden">
           <div className="md:col-span-4 relative">
             <Search className="absolute left-3 top-3 h-4.5 w-4.5 text-secondary-text" />
             <input
@@ -361,30 +362,28 @@ export default function PaymentsPage() {
             />
           </div>
 
-          <div className="md:col-span-2">
-            <select
+          <div className="md:col-span-2 min-w-0">
+            <SelectField
               value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-              className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 sm:py-2.5 px-3 text-[11px] sm:text-xs text-primary-text outline-none transition-all"
-            >
-              <option value="All">All Statuses</option>
-              <option value="Pending">Pending (Unpaid)</option>
-              <option value="Partially Paid">Partially Paid</option>
-              <option value="Fully Paid">Fully Paid</option>
-            </select>
+              onChange={(value) => { setStatusFilter(value); setPage(1); }}
+              options={[
+                { value: 'All', label: 'All Statuses' },
+                { value: 'Pending', label: 'Pending (Unpaid)' },
+                { value: 'Partially Paid', label: 'Partially Paid' },
+                { value: 'Fully Paid', label: 'Fully Paid' },
+              ]}
+            />
           </div>
 
-          <div className="md:col-span-2">
-            <select
+          <div className="md:col-span-2 min-w-0">
+            <SelectField
               value={doctorFilter}
-              onChange={(e) => { setDoctorFilter(e.target.value); setPage(1); }}
-              className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 sm:py-2.5 px-3 text-[11px] sm:text-xs text-primary-text outline-none transition-all"
-            >
-              <option value="All">All Doctors</option>
-              {doctors.map(d => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </select>
+              onChange={(value) => { setDoctorFilter(value); setPage(1); }}
+              options={[
+                { value: 'All', label: 'All Doctors' },
+                ...doctors.map((d) => ({ value: String(d.id), label: d.name })),
+              ]}
+            />
           </div>
 
           <div className="md:col-span-2 flex flex-col sm:flex-row gap-1.5">
@@ -404,16 +403,16 @@ export default function PaymentsPage() {
             />
           </div>
 
-          <div className="md:col-span-2">
-            <select
+          <div className="md:col-span-2 min-w-0">
+            <SelectField
               value={sortBy}
-              onChange={(e) => { setSortBy(e.target.value); setPage(1); }}
-              className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 sm:py-2.5 px-3 text-[11px] sm:text-xs text-primary-text outline-none transition-all"
-            >
-              <option value="latest">Latest Appts</option>
-              <option value="highest_pending">Highest Pending</option>
-              <option value="oldest_pending">Oldest Pending</option>
-            </select>
+              onChange={(value) => { setSortBy(value); setPage(1); }}
+              options={[
+                { value: 'latest', label: 'Latest Appts' },
+                { value: 'highest_pending', label: 'Highest Pending' },
+                { value: 'oldest_pending', label: 'Oldest Pending' },
+              ]}
+            />
           </div>
         </div>
 
@@ -745,16 +744,17 @@ export default function PaymentsPage() {
                     
                     <div>
                       <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Payment Method</label>
-                      <select
+                      <SelectField
                         id="form-pay-method"
                         value={payMethod}
-                        onChange={(e) => setPayMethod(e.target.value)}
-                        className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2.5 px-3 text-xs text-primary-text outline-none"
-                      >
-                        <option value="Digital (UPI/Card)">UPI / GPay / PhonePe</option>
-                        <option value="Cash Receipt">Cash Desk</option>
-                        <option value="Bank Transfer">Bank Wire</option>
-                      </select>
+                        onChange={setPayMethod}
+                        triggerClassName="py-2.5 text-xs"
+                        options={[
+                          { value: 'Digital (UPI/Card)', label: 'UPI / GPay / PhonePe' },
+                          { value: 'Cash Receipt', label: 'Cash Desk' },
+                          { value: 'Bank Transfer', label: 'Bank Wire' },
+                        ]}
+                      />
                     </div>
                   </div>
 

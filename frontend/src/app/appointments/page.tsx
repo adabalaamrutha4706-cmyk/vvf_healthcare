@@ -11,6 +11,7 @@ import {
   Eye
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { SelectField } from '../../components/SelectField';
 
 function AppointmentsContent() {
   const { user } = useAuth();
@@ -740,16 +741,17 @@ function AppointmentsContent() {
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Gender</label>
-                      <select
+                      <SelectField
                         id="form-gender"
                         value={gender}
-                        onChange={(e) => setGender(e.target.value)}
-                        className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-secondary-text outline-none"
-                      >
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                        <option value="Other">Other</option>
-                      </select>
+                        onChange={setGender}
+                        triggerClassName="py-2 px-3 text-xs text-secondary-text"
+                        options={[
+                          { value: 'Male', label: 'Male' },
+                          { value: 'Female', label: 'Female' },
+                          { value: 'Other', label: 'Other' },
+                        ]}
+                      />
                     </div>
                   </div>
 
@@ -757,31 +759,29 @@ function AppointmentsContent() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Assigned Clinician</label>
-                      <select
+                      <SelectField
                         id="form-doctor-id"
-                        required
                         value={doctorId}
-                        onChange={(e) => setDoctorId(e.target.value)}
-                        className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-secondary-text outline-none"
-                      >
-                        {doctors.map(d => (
-                          <option key={d.id} value={d.id}>🩺 {d.name} ({d.role})</option>
-                        ))}
-                      </select>
+                        onChange={setDoctorId}
+                        triggerClassName="py-2 px-3 text-xs text-secondary-text"
+                        options={doctors.map((d) => ({
+                          value: String(d.id),
+                          label: `🩺 ${d.name} (${d.role})`,
+                        }))}
+                      />
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Foundation Hospital</label>
-                      <select
+                      <SelectField
                         id="form-hospital-id"
-                        required
                         value={hospitalId}
-                        onChange={(e) => setHospitalId(e.target.value)}
-                        className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-secondary-text outline-none"
-                      >
-                        {hospitals.map(h => (
-                          <option key={h.id} value={h.id}>🏥 {h.name} ({h.hospital_uid || 'UID Pending'} - {h.city})</option>
-                        ))}
-                      </select>
+                        onChange={setHospitalId}
+                        triggerClassName="py-2 px-3 text-xs text-secondary-text"
+                        options={hospitals.map((h) => ({
+                          value: String(h.id),
+                          label: `🏥 ${h.name} (${h.hospital_uid || 'UID Pending'} - ${h.city})`,
+                        }))}
+                      />
                     </div>
                   </div>
 
@@ -909,16 +909,17 @@ function AppointmentsContent() {
                     
                     <div>
                       <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Payment Method</label>
-                      <select
+                      <SelectField
                         id="payment-method"
                         value={paymentMethod}
-                        onChange={(e) => setPaymentMethod(e.target.value)}
-                        className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2.5 px-3 text-xs text-secondary-text outline-none"
-                      >
-                        <option value="Digital (UPI/Card)">UPI / GPay / PhonePe</option>
-                        <option value="Cash Receipt">Cash Desk</option>
-                        <option value="Bank Transfer">Bank Wire</option>
-                      </select>
+                        onChange={setPaymentMethod}
+                        triggerClassName="py-2.5 px-3 text-xs text-secondary-text"
+                        options={[
+                          { value: 'Digital (UPI/Card)', label: 'UPI / GPay / PhonePe' },
+                          { value: 'Cash Receipt', label: 'Cash Desk' },
+                          { value: 'Bank Transfer', label: 'Bank Wire' },
+                        ]}
+                      />
                     </div>
                   </div>
 

@@ -9,6 +9,7 @@ import {
   Mail, Phone, Shield, UserX, UserCheck, X, Sparkles, Key
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { SelectField } from '../../components/SelectField';
 
 export default function UsersPage() {
   const { user } = useAuth();
@@ -495,19 +496,20 @@ export default function UsersPage() {
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Role Permission</label>
-                      <select
+                      <SelectField
                         id="form-user-role"
                         value={role}
-                        onChange={(e) => setRole(e.target.value)}
-                        className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-primary-text outline-none"
-                      >
-                        <option value="Doctor">🩺 Doctor (Clinician)</option>
-                        <option value="Chief Doctor">🏥 Chief Doctor</option>
-                        <option value="Reception">📝 Reception Desk</option>
-                        <option value="Telecaller">📞 Telecaller Outreach</option>
-                        <option value="Executive">🏃‍♂️ Field Executive</option>
-                        <option value="Admin">💼 Administrator</option>
-                      </select>
+                        onChange={setRole}
+                        triggerClassName="py-2 px-3 text-xs"
+                        options={[
+                          { value: 'Doctor', label: '🩺 Doctor (Clinician)' },
+                          { value: 'Chief Doctor', label: '🏥 Chief Doctor' },
+                          { value: 'Reception', label: '📝 Reception Desk' },
+                          { value: 'Telecaller', label: '📞 Telecaller Outreach' },
+                          { value: 'Executive', label: '🏃‍♂️ Field Executive' },
+                          { value: 'Admin', label: '💼 Administrator' },
+                        ]}
+                      />
                     </div>
                   </div>
 
@@ -529,15 +531,16 @@ export default function UsersPage() {
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">System Access State</label>
-                      <select
+                      <SelectField
                         id="form-user-active"
                         value={isActive ? 'true' : 'false'}
-                        onChange={(e) => setIsActive(e.target.value === 'true')}
-                        className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-primary-text outline-none"
-                      >
-                        <option value="true">Active (Granted Access)</option>
-                        <option value="false">Suspended (Blocked Access)</option>
-                      </select>
+                        onChange={(value) => setIsActive(value === 'true')}
+                        triggerClassName="py-2 px-3 text-xs"
+                        options={[
+                          { value: 'true', label: 'Active (Granted Access)' },
+                          { value: 'false', label: 'Suspended (Blocked Access)' },
+                        ]}
+                      />
                     </div>
                   </div>
 

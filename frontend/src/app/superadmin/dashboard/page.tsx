@@ -10,6 +10,7 @@ import {
   FileText, Activity, RefreshCw, KeyRound, Monitor, ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { SelectField } from '../../../components/SelectField';
 
 export default function SuperadminDashboard() {
   const { user } = useAuth();
@@ -1064,19 +1065,20 @@ export default function SuperadminDashboard() {
 
                   <div>
                     <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Access Role</label>
-                    <select
+                    <SelectField
                       value={userForm.role}
-                      onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
-                      className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-primary-text outline-none"
-                    >
-                      <option value="Doctor">Doctor</option>
-                      <option value="Chief Doctor">Chief Doctor</option>
-                      <option value="Reception">Reception</option>
-                      <option value="Telecaller">Telecaller</option>
-                      <option value="Executive">Executive</option>
-                      <option value="Admin">Admin</option>
-                      <option value="Superadmin">Superadmin</option>
-                    </select>
+                      onChange={(value) => setUserForm({ ...userForm, role: value })}
+                      triggerClassName="py-2 px-3 text-xs"
+                      options={[
+                        { value: 'Doctor', label: 'Doctor' },
+                        { value: 'Chief Doctor', label: 'Chief Doctor' },
+                        { value: 'Reception', label: 'Reception' },
+                        { value: 'Telecaller', label: 'Telecaller' },
+                        { value: 'Executive', label: 'Executive' },
+                        { value: 'Admin', label: 'Admin' },
+                        { value: 'Superadmin', label: 'Superadmin' },
+                      ]}
+                    />
                   </div>
 
                   <div>

@@ -46,3 +46,8 @@ body {
     box-sizing: border-box;
   }
 }
+
+/* Fallback: native selects still respect parent width if any remain */
+select {
+  max-width: 100%;
+}

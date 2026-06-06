@@ -9,6 +9,7 @@ import {
   User, Calendar, Clock, X, Sparkles, Phone, MessageSquare
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { SelectField } from '../../components/SelectField';
 
 export default function TelecallerPage() {
   const { user } = useAuth();
@@ -536,18 +537,19 @@ export default function TelecallerPage() {
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Outreach Status</label>
-                      <select
+                      <SelectField
                         id="form-lead-status"
                         value={status}
-                        onChange={(e) => setStatus(e.target.value)}
-                        className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-primary-text outline-none"
-                      >
-                        <option value="Interested">Interested</option>
-                        <option value="Follow-up">Callback Follow-up</option>
-                        <option value="Confirmed">Confirmed Appointment</option>
-                        <option value="Not Responding">Not Responding</option>
-                        <option value="Completed">Outreach Complete</option>
-                      </select>
+                        onChange={setStatus}
+                        triggerClassName="py-2 px-3 text-xs"
+                        options={[
+                          { value: 'Interested', label: 'Interested' },
+                          { value: 'Follow-up', label: 'Callback Follow-up' },
+                          { value: 'Confirmed', label: 'Confirmed Appointment' },
+                          { value: 'Not Responding', label: 'Not Responding' },
+                          { value: 'Completed', label: 'Outreach Complete' },
+                        ]}
+                      />
                     </div>
                   </div>
 
@@ -564,24 +566,24 @@ export default function TelecallerPage() {
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Assigned Telecaller</label>
-                      <select
+                      <SelectField
                         id="form-lead-assignee"
                         value={assignedTo}
                         disabled={user?.role === 'Telecaller'}
-                        onChange={(e) => setAssignedTo(e.target.value)}
-                        className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-primary-text outline-none disabled:bg-slate-50 disabled:text-slate-500"
-                      >
-                        {user?.role === 'Telecaller' ? (
-                          <option value={user.id}>{user.name} ({user.role})</option>
-                        ) : (
-                          <>
-                            <option value="">Choose Telecaller</option>
-                            {staff.map(s => (
-                              <option key={s.id} value={s.id}>{s.name} ({s.role})</option>
-                            ))}
-                          </>
-                        )}
-                      </select>
+                        onChange={setAssignedTo}
+                        triggerClassName="py-2 px-3 text-xs disabled:bg-slate-50 disabled:text-slate-500"
+                        options={
+                          user?.role === 'Telecaller'
+                            ? [{ value: String(user.id), label: `${user.name} (${user.role})` }]
+                            : [
+                                { value: '', label: 'Choose Telecaller' },
+                                ...staff.map((s) => ({
+                                  value: String(s.id),
+                                  label: `${s.name} (${s.role})`,
+                                })),
+                              ]
+                        }
+                      />
                     </div>
                   </div>
 

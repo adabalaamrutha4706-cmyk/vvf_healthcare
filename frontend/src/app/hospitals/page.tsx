@@ -10,6 +10,7 @@ import {
   CheckSquare, Check, Compass, Shield, Eye, Calendar, AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { SelectField } from '../../components/SelectField';
 
 export default function HospitalsPage() {
   const { user } = useAuth();
@@ -902,48 +903,51 @@ export default function HospitalsPage() {
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                           <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Hospital Type</label>
-                          <select
+                          <SelectField
                             id="form-hosp-type"
                             value={hospitalType}
-                            onChange={(e) => setHospitalType(e.target.value)}
-                            className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-primary-text outline-none"
-                          >
-                            <option value="Clinic">Clinic</option>
-                            <option value="Hospital">Hospital</option>
-                            <option value="Diagnostic Center">Diagnostic Center</option>
-                            <option value="Medical Center">Medical Center</option>
-                            <option value="Nursing Home">Nursing Home</option>
-                            <option value="Other">Other</option>
-                          </select>
+                            onChange={setHospitalType}
+                            triggerClassName="py-2 px-3 text-xs"
+                            options={[
+                              { value: 'Clinic', label: 'Clinic' },
+                              { value: 'Hospital', label: 'Hospital' },
+                              { value: 'Diagnostic Center', label: 'Diagnostic Center' },
+                              { value: 'Medical Center', label: 'Medical Center' },
+                              { value: 'Nursing Home', label: 'Nursing Home' },
+                              { value: 'Other', label: 'Other' },
+                            ]}
+                          />
                         </div>
 
                         <div>
                           <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Network Status</label>
-                          <select
+                          <SelectField
                             id="form-hosp-status"
                             value={status}
-                            onChange={(e) => setStatus(e.target.value)}
-                            className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-primary-text outline-none"
-                          >
-                            <option value="Active">Active Branch</option>
-                            <option value="Pending">Pending Audit</option>
-                            <option value="Suspended">Suspended</option>
-                          </select>
+                            onChange={setStatus}
+                            triggerClassName="py-2 px-3 text-xs"
+                            options={[
+                              { value: 'Active', label: 'Active Branch' },
+                              { value: 'Pending', label: 'Pending Audit' },
+                              { value: 'Suspended', label: 'Suspended' },
+                            ]}
+                          />
                         </div>
 
                         <div>
                           <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Visit Frequency</label>
-                          <select
+                          <SelectField
                             id="form-hosp-frequency"
                             value={visitFrequency}
-                            onChange={(e) => setVisitFrequency(e.target.value)}
-                            className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-primary-text outline-none"
-                          >
-                            <option value="Daily">Daily</option>
-                            <option value="Weekly">Weekly</option>
-                            <option value="Bi-weekly">Bi-weekly</option>
-                            <option value="Monthly">Monthly</option>
-                          </select>
+                            onChange={setVisitFrequency}
+                            triggerClassName="py-2 px-3 text-xs"
+                            options={[
+                              { value: 'Daily', label: 'Daily' },
+                              { value: 'Weekly', label: 'Weekly' },
+                              { value: 'Bi-weekly', label: 'Bi-weekly' },
+                              { value: 'Monthly', label: 'Monthly' },
+                            ]}
+                          />
                         </div>
                       </div>
 
@@ -1404,7 +1408,7 @@ export default function HospitalsPage() {
                           )}
                         </div>
 
-                        <div className="relative">
+                        <div className="relative min-w-0 max-w-full">
                           <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Assigned Executives *</label>
                           
                           {/* Dropdown Button */}
@@ -1442,7 +1446,7 @@ export default function HospitalsPage() {
 
                           {/* Dropdown Options */}
                           {isExecDropdownOpen && (
-                            <div className="absolute z-20 w-full mt-1 bg-white border border-border-gray rounded-xl shadow-xl p-2.5 space-y-2">
+                            <div className="absolute z-20 left-0 right-0 w-full max-w-full min-w-0 mt-1 bg-white border border-border-gray rounded-xl shadow-xl p-2.5 space-y-2">
                               <input
                                 type="text"
                                 placeholder="Search executives..."

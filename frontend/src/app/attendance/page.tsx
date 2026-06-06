@@ -9,6 +9,7 @@ import {
   TrendingUp, ShieldAlert, CheckCircle,
   Search, Users, RefreshCw, Filter
 } from 'lucide-react';
+import { SelectField } from '../../components/SelectField';
 
 export default function AttendancePage() {
   const { user, isPunchedIn, activePunchRecord } = useAuth();
@@ -318,35 +319,37 @@ export default function AttendancePage() {
               </div>
 
               {/* Role Select */}
-              <div>
+              <div className="min-w-0">
                 <label className="block text-[9px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Role Permission</label>
-                <select
+                <SelectField
                   value={filterRole}
-                  onChange={(e) => { setFilterRole(e.target.value); setPage(1); }}
-                  className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-secondary-text outline-none transition-all cursor-pointer"
-                >
-                  <option value="">All Roles</option>
-                  <option value="Admin">Admin</option>
-                  <option value="Chief Doctor">Chief Doctor</option>
-                  <option value="Doctor">Doctor</option>
-                  <option value="Reception">Reception</option>
-                  <option value="Telecaller">Telecaller</option>
-                  <option value="Executive">Executive</option>
-                </select>
+                  onChange={(value) => { setFilterRole(value); setPage(1); }}
+                  triggerClassName="py-2 text-xs text-secondary-text"
+                  options={[
+                    { value: '', label: 'All Roles' },
+                    { value: 'Admin', label: 'Admin' },
+                    { value: 'Chief Doctor', label: 'Chief Doctor' },
+                    { value: 'Doctor', label: 'Doctor' },
+                    { value: 'Reception', label: 'Reception' },
+                    { value: 'Telecaller', label: 'Telecaller' },
+                    { value: 'Executive', label: 'Executive' },
+                  ]}
+                />
               </div>
 
               {/* Status Select */}
-              <div>
+              <div className="min-w-0">
                 <label className="block text-[9px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Session Status</label>
-                <select
+                <SelectField
                   value={filterStatus}
-                  onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
-                  className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-secondary-text outline-none transition-all cursor-pointer"
-                >
-                  <option value="">All Statuses</option>
-                  <option value="active">Active/Online</option>
-                  <option value="completed">Completed</option>
-                </select>
+                  onChange={(value) => { setFilterStatus(value); setPage(1); }}
+                  triggerClassName="py-2 text-xs text-secondary-text"
+                  options={[
+                    { value: '', label: 'All Statuses' },
+                    { value: 'active', label: 'Active/Online' },
+                    { value: 'completed', label: 'Completed' },
+                  ]}
+                />
               </div>
 
               {/* Start Date */}
