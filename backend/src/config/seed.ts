@@ -1,10 +1,152 @@
 import bcrypt from 'bcryptjs';
 import { query, localDb } from './db';
+import * as fs from 'fs';
+import * as path from 'path';
+import { standardizeHospitalUIDs } from '../migrations/standardizeHospitals';
 
 const hashPassword = (pwd: string) => bcrypt.hashSync(pwd, 10);
 
 export const seedDatabase = async () => {
+  // Read and run schema.sql to ensure tables exist in Postgres
+  try {
+    const schemaPath = path.join(__dirname, '../../schema.sql');
+    if (fs.existsSync(schemaPath)) {
+      const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+      await query(schemaSql);
+    }
+
+    // Dynamic Alterations for Visit Verification Feature Columns
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION;").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS longitude DOUBLE PRECISION;").catch(() => {});
+    
+    // Core Location Fields
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS address TEXT;").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS landmark VARCHAR(255);").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS pincode VARCHAR(20);").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS google_maps_link VARCHAR(500);").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS allowed_radius INTEGER DEFAULT 200;").catch(() => {});
+
+    // Hospital Metadata
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS hospital_type VARCHAR(100) DEFAULT 'Clinic';").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS branch_code VARCHAR(50);").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS visiting_hours VARCHAR(255);").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS territory_zone VARCHAR(100);").catch(() => {});
+
+    // Contact Information
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS reception_phone VARCHAR(100);").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS alternate_phone VARCHAR(100);").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS email VARCHAR(255);").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS hospital_admin_name VARCHAR(255);").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS department VARCHAR(100);").catch(() => {});
+
+    // Executive Assignment
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS assigned_executives TEXT;").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS visit_frequency VARCHAR(100) DEFAULT 'Weekly';").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS last_visit_date TIMESTAMP WITH TIME ZONE;").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS total_visits INTEGER DEFAULT 0;").catch(() => {});
+
+    // Geo-Verification Settings
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS require_gps_validation BOOLEAN DEFAULT TRUE;").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS require_live_photo BOOLEAN DEFAULT FALSE;").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS require_checkout BOOLEAN DEFAULT TRUE;").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS allow_remote_completion BOOLEAN DEFAULT TRUE;").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS geofencing_enabled BOOLEAN DEFAULT TRUE;").catch(() => {});
+
+    // Status & Audit Fields
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS created_by INTEGER;").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS hospital_uid VARCHAR(50) UNIQUE;").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS geo_verification_status VARCHAR(100) DEFAULT 'MANUAL_REVIEW_REQUIRED';").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS updated_by INTEGER;").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS legacy_hospital_id VARCHAR(100);").catch(() => {});
+
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS checkin_latitude DOUBLE PRECISION;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS checkin_longitude DOUBLE PRECISION;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS geo_verification_status VARCHAR(100);").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS checkin_time TIMESTAMP WITH TIME ZONE;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS checkout_time TIMESTAMP WITH TIME ZONE;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS visit_status VARCHAR(100);").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS distance_from_hospital_meters DOUBLE PRECISION;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS device_info TEXT;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS is_mock_location BOOLEAN DEFAULT FALSE;").catch(() => {});
+    
+    await query("ALTER TABLE visit_photos ADD COLUMN IF NOT EXISTS captured_latitude DOUBLE PRECISION;").catch(() => {});
+    await query("ALTER TABLE visit_photos ADD COLUMN IF NOT EXISTS captured_longitude DOUBLE PRECISION;").catch(() => {});
+    await query("ALTER TABLE visit_photos ADD COLUMN IF NOT EXISTS captured_by INTEGER;").catch(() => {});
+
+    // Checkout coordinates & accuracies (additional requirements)
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS checkout_latitude DOUBLE PRECISION;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS checkout_longitude DOUBLE PRECISION;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS checkout_accuracy DOUBLE PRECISION;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS checkin_accuracy DOUBLE PRECISION;").catch(() => {});
+
+    // Completion, status tracking, timestamps, reminders, and snapshots
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP WITH TIME ZONE;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS evidence_uploaded BOOLEAN DEFAULT FALSE;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS summary_submitted BOOLEAN DEFAULT FALSE;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS observations_submitted BOOLEAN DEFAULT FALSE;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS completion_progress INTEGER DEFAULT 0;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS photo_uploaded_at TIMESTAMP WITH TIME ZONE;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS summary_submitted_at TIMESTAMP WITH TIME ZONE;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS observations_submitted_at TIMESTAMP WITH TIME ZONE;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS expired_at TIMESTAMP WITH TIME ZONE;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS reopened_at TIMESTAMP WITH TIME ZONE;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS reopened_by INTEGER;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS reminder_6h_sent BOOLEAN DEFAULT FALSE;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS reminder_2h_sent BOOLEAN DEFAULT FALSE;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS reminder_30m_sent BOOLEAN DEFAULT FALSE;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS checkin_hospital_lat DOUBLE PRECISION;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS checkin_hospital_lng DOUBLE PRECISION;").catch(() => {});
+
+    // Users login tracking columns
+    await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP WITH TIME ZONE;").catch(() => {});
+    await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_ip VARCHAR(100);").catch(() => {});
+    await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_device TEXT;").catch(() => {});
+
+    // Database indexing for dashboard performance (additional requirements)
+    await query("CREATE INDEX IF NOT EXISTS idx_appointments_created_at ON appointments(created_at);").catch(() => {});
+    await query("CREATE INDEX IF NOT EXISTS idx_appointments_doctor_id ON appointments(doctor_id);").catch(() => {});
+    await query("CREATE INDEX IF NOT EXISTS idx_visits_executive_id ON visits(executive_id);").catch(() => {});
+    await query("CREATE INDEX IF NOT EXISTS idx_visits_checkin_time ON visits(checkin_time);").catch(() => {});
+    await query("CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id);").catch(() => {});
+    await query("CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);").catch(() => {});
+
+    // Create appointment_edit_history if not exists
+    await query(`
+      CREATE TABLE IF NOT EXISTS appointment_edit_history (
+        id SERIAL PRIMARY KEY,
+        appointment_id INTEGER NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
+        edited_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        edited_by_name VARCHAR(255) NOT NULL,
+        edited_by_designation VARCHAR(100),
+        edited_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        old_values JSONB NOT NULL,
+        new_values JSONB NOT NULL,
+        change_summary TEXT NOT NULL
+      );
+    `).catch((err) => console.error('Failed to create appointment_edit_history table in Postgres:', err));
+
+    await query("CREATE INDEX IF NOT EXISTS idx_appointment_edit_history_appointment ON appointment_edit_history(appointment_id);").catch(() => {});
+
+    // Run VVF UID Standardization & Backfill migration
+    await standardizeHospitalUIDs();
+
+    console.log('Database schema checked/initialized successfully in Postgres.');
+  } catch (err: any) {
+    console.error('Failed to run schema migrations:', err.message);
+  }
+
   const users = [
+    {
+      id: 999,
+      name: 'VVF Super Administrator',
+      email: process.env.INITIAL_SUPERADMIN_EMAIL || 'superadmin@vvf.org',
+      password_hash: hashPassword(process.env.INITIAL_SUPERADMIN_PASSWORD || 'superadmin123'),
+      role: 'Superadmin',
+      phone: '+91 9999999990',
+      is_active: true,
+      is_deleted: false
+    },
     {
       id: 1,
       name: 'VVF Administrator',
@@ -76,7 +218,10 @@ export const seedDatabase = async () => {
       contact_person: 'Mr. K. Rao',
       phone: '+91 9876543210',
       status: 'Active',
-      is_deleted: false
+      latitude: 17.385044,
+      longitude: 78.486671,
+      is_deleted: false,
+      hospital_uid: 'VVF-001'
     },
     {
       id: 2,
@@ -86,7 +231,10 @@ export const seedDatabase = async () => {
       contact_person: 'Dr. Srinivas',
       phone: '+91 9876543211',
       status: 'Active',
-      is_deleted: false
+      latitude: 17.448293,
+      longitude: 78.508544,
+      is_deleted: false,
+      hospital_uid: 'VVF-002'
     },
     {
       id: 3,
@@ -96,7 +244,10 @@ export const seedDatabase = async () => {
       contact_person: 'Mrs. Lakshmi',
       phone: '+91 9876543212',
       status: 'Active',
-      is_deleted: false
+      latitude: 16.506174,
+      longitude: 80.648015,
+      is_deleted: false,
+      hospital_uid: 'VVF-003'
     },
     {
       id: 4,
@@ -106,7 +257,11 @@ export const seedDatabase = async () => {
       contact_person: 'Mr. Ramesh',
       phone: '+91 9876543213',
       status: 'Pending',
-      is_deleted: false
+      latitude: 17.686816,
+      longitude: 83.218482,
+      is_deleted: false,
+      geofencing_enabled: false,
+      hospital_uid: 'VVF-004'
     }
   ];
 
@@ -287,10 +442,14 @@ export const seedDatabase = async () => {
     }
     for (const h of hospitals) {
       await query(`
-        INSERT INTO hospitals (id, name, city, state, contact_person, phone, status, is_deleted)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        ON CONFLICT (id) DO NOTHING
-      `, [h.id, h.name, h.city, h.state, h.contact_person, h.phone, h.status, h.is_deleted]);
+        INSERT INTO hospitals (id, name, city, state, contact_person, phone, status, latitude, longitude, is_deleted, geofencing_enabled, hospital_uid)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        ON CONFLICT (id) DO UPDATE SET 
+          latitude = EXCLUDED.latitude, 
+          longitude = EXCLUDED.longitude, 
+          geofencing_enabled = EXCLUDED.geofencing_enabled,
+          hospital_uid = COALESCE(hospitals.hospital_uid, EXCLUDED.hospital_uid)
+      `, [h.id, h.name, h.city, h.state, h.contact_person, h.phone, h.status, h.latitude, h.longitude, h.is_deleted, h.geofencing_enabled !== undefined ? h.geofencing_enabled : true, h.hospital_uid]);
     }
     // Set serial sequences correctly in postgres
     await query("SELECT setval('users_id_seq', (SELECT MAX(id) FROM users))").catch(() => {});

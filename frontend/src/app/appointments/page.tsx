@@ -7,13 +7,28 @@ import { DashboardLayout } from '../../components/DashboardLayout';
 import { api } from '../../lib/api';
 import { 
   Calendar as CalendarIcon, User, Search, Filter, Plus, Edit3, Trash2, 
-  Lock, CheckCircle, Clock, IndianRupee, ShieldAlert, Sparkles, X, HeartHandshake
+  Lock, CheckCircle, Clock, IndianRupee, ShieldAlert, Sparkles, X, HeartHandshake,
+  Eye
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 function AppointmentsContent() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
+
+  if (user?.role === 'Executive') {
+    return (
+      <DashboardLayout>
+        <div className="flex h-[60vh] items-center justify-center">
+          <div className="text-center p-6 bg-white border border-border-gray rounded-2xl max-w-sm shadow-sm">
+            <ShieldAlert className="h-10 w-10 text-alert-text mx-auto mb-3" />
+            <h3 className="font-bold text-primary-text text-sm">Access Denied</h3>
+            <p className="text-xs text-secondary-text mt-2">Field Executives do not have access to appointments scheduling records.</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
   
   // Lists
   const [appointments, setAppointments] = useState<any[]>([]);
@@ -50,9 +65,127 @@ function AppointmentsContent() {
   const [notes, setNotes] = useState('');
   const [totalAmount, setTotalAmount] = useState('');
 
+  // Validation states
+  const [patientNameError, setPatientNameError] = useState('');
+  const [contactNumberError, setContactNumberError] = useState('');
+  const [appointmentDateError, setAppointmentDateError] = useState('');
+  const [totalAmountError, setTotalAmountError] = useState('');
+
+  // Details Modal & History states
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [selectedAppForDetails, setSelectedAppForDetails] = useState<any | null>(null);
+  const [editHistory, setEditHistory] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Validation functions
+  const validatePatientName = (val: string): boolean => {
+    if (!val) {
+      setPatientNameError('Patient Name is required.');
+      return false;
+    }
+    const nameRegex = /^(?=.*[A-Za-z])[A-Za-z\s]*\.?[A-Za-z\s]*$/;
+    if (!nameRegex.test(val)) {
+      setPatientNameError('Patient name can contain only letters.');
+      return false;
+    }
+    setPatientNameError('');
+    return true;
+  };
+
+  const validateContactNumber = (val: string): boolean => {
+    if (!val) {
+      setContactNumberError('Contact Number is required.');
+      return false;
+    }
+    const phoneRegex = /^\d{10}$/;
+    if (!phoneRegex.test(val)) {
+      setContactNumberError('Contact number must contain exactly 10 digits.');
+      return false;
+    }
+    setContactNumberError('');
+    return true;
+  };
+
+  const validateAppointmentDate = (val: string): boolean => {
+    if (!val) {
+      setAppointmentDateError('Appointment Date is required.');
+      return false;
+    }
+    const selectedDate = new Date(val);
+    if (isNaN(selectedDate.getTime())) {
+      setAppointmentDateError('Invalid date format.');
+      return false;
+    }
+    const today = new Date();
+    const selectedDateOnly = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+    const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    if (!selectedApp && selectedDateOnly < todayDateOnly) {
+      setAppointmentDateError('Past appointment dates are not allowed.');
+      return false;
+    }
+    setAppointmentDateError('');
+    return true;
+  };
+
+  const validateTotalAmount = (val: string): boolean => {
+    if (val === undefined || val === null || val === '') {
+      setTotalAmountError('Consultation fee is required.');
+      return false;
+    }
+    const feeRegex = /^\d+$/;
+    if (!feeRegex.test(val)) {
+      setTotalAmountError('Consultation fee must contain only numbers.');
+      return false;
+    }
+    const num = parseFloat(val);
+    if (num < 0 || num > 99999999) {
+      setTotalAmountError('Consultation fee must contain only numbers.');
+      return false;
+    }
+    setTotalAmountError('');
+    return true;
+  };
+
+  const handlePatientNameChange = (val: string) => {
+    setPatientName(val);
+    validatePatientName(val);
+  };
+
+  const handleContactNumberChange = (val: string) => {
+    setContactNumber(val);
+    validateContactNumber(val);
+  };
+
+  const handleAppointmentDateChange = (val: string) => {
+    setAppointmentDate(val);
+    validateAppointmentDate(val);
+  };
+
+  const handleTotalAmountChange = (val: string) => {
+    setTotalAmount(val);
+    validateTotalAmount(val);
+  };
+
+  const resetFormErrors = () => {
+    setPatientNameError('');
+    setContactNumberError('');
+    setAppointmentDateError('');
+    setTotalAmountError('');
+  };
+
+  const getTodayMinStr = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}T00:00`;
+  };
+
   useEffect(() => {
+    if (!user) return;
     fetchData();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     // If query string has new=true, auto-open form
@@ -96,6 +229,7 @@ function AppointmentsContent() {
     setTotalAmount('1500'); // default consult fee
     setError('');
     setSuccess('');
+    resetFormErrors();
     setIsFormOpen(true);
   };
 
@@ -112,7 +246,25 @@ function AppointmentsContent() {
     setTotalAmount(app.total_amount.toString());
     setError('');
     setSuccess('');
+    resetFormErrors();
     setIsFormOpen(true);
+  };
+
+  const handleOpenDetails = async (app: any) => {
+    setSelectedAppForDetails(app);
+    setEditHistory([]);
+    setHistoryLoading(true);
+    setIsDetailsOpen(true);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await api.appointments.getHistory(app.id);
+      setEditHistory(res.history || []);
+    } catch (err: any) {
+      console.error('Failed to load edit history:', err);
+    } finally {
+      setHistoryLoading(false);
+    }
   };
 
   const handleOpenPayment = (app: any) => {
@@ -129,6 +281,16 @@ function AppointmentsContent() {
     setSubmitLoading(true);
     setError('');
     setSuccess('');
+
+    const isNameValid = validatePatientName(patientName);
+    const isPhoneValid = validateContactNumber(contactNumber);
+    const isDateValid = validateAppointmentDate(appointmentDate);
+    const isFeeValid = validateTotalAmount(totalAmount);
+
+    if (!isNameValid || !isPhoneValid || !isDateValid || !isFeeValid) {
+      setSubmitLoading(false);
+      return;
+    }
 
     const payload = {
       patient_name: patientName,
@@ -195,32 +357,56 @@ function AppointmentsContent() {
 
   // Helper to determine if an appointment is editable based on user role and elapsed time
   const getEditLockStatus = (app: any) => {
-    if (['Admin', 'Chief Doctor'].includes(user?.role || '')) {
-      return { locked: false, reason: 'Unrestricted Chief access override' };
+    if (['Admin', 'Superadmin'].includes(user?.role || '')) {
+      return { locked: false, countdown: '', reason: 'Permanent edit access' };
     }
     if (['Telecaller', 'Executive'].includes(user?.role || '')) {
-      return { locked: true, reason: 'Role unauthorized' };
+      return { locked: true, countdown: '', reason: 'Unauthorized role' };
+    }
+
+    if (user?.role === 'Reception') {
+      const outstanding = parseFloat(app.total_amount || 0) - parseFloat(app.paid_amount || 0);
+      const isPaid = ['Paid', 'Fully Cleared', 'Completed'].includes(app.payment_status) || (parseFloat(app.total_amount) > 0 && outstanding <= 0);
+      if (isPaid) {
+        return { locked: true, countdown: '', reason: 'Editing locked because payment has been fully cleared.' };
+      }
+      return { locked: false, countdown: 'Editable (Payment pending/partial)', reason: 'Editable' };
     }
 
     const elapsedMs = Date.now() - new Date(app.created_at).getTime();
-    const elapsedHrs = elapsedMs / (1000 * 60 * 60);
-
-    if (user?.role === 'Reception') {
-      if (elapsedHrs > 3) {
-        return { locked: true, reason: `Locked (3h window elapsed. Current: ${elapsedHrs.toFixed(1)}h)` };
-      }
-      return { locked: false, reason: 'Within 3h Reception edit window' };
-    }
+    let limitMs = 0;
+    let label = '';
 
     if (user?.role === 'Doctor') {
-      if (elapsedHrs > 24) {
-        return { locked: true, reason: `Locked (24h window elapsed. Current: ${elapsedHrs.toFixed(1)}h)` };
-      }
-      return { locked: false, reason: 'Within 24h Doctor edit window' };
+      limitMs = 24 * 60 * 60 * 1000;
+      label = 'Doctor';
+    } else if (user?.role === 'Chief Doctor') {
+      limitMs = 72 * 60 * 60 * 1000;
+      label = 'Chief Doctor';
+    } else {
+      return { locked: true, countdown: '', reason: 'Access locked' };
     }
 
-    return { locked: true, reason: 'Access locked' };
+    const remainingMs = limitMs - elapsedMs;
+    if (remainingMs <= 0) {
+      return { locked: true, countdown: '', reason: `Locked (${label} limit elapsed)` };
+    }
+
+    // Format remaining time
+    const totalMinutes = Math.floor(remainingMs / (1000 * 60));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    
+    let countdownStr = '';
+    if (hours > 0) {
+      countdownStr = `Editable for next ${hours}h ${minutes}m`;
+    } else {
+      countdownStr = `Editable for next ${minutes}m`;
+    }
+
+    return { locked: false, countdown: countdownStr, reason: `Editable within ${label} window` };
   };
+
 
   const filteredAppointments = appointments.filter(app => {
     const matchesSearch = app.patient_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -233,16 +419,16 @@ function AppointmentsContent() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="space-y-4">
         
         {/* Header Block */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
+            <h1 className="text-lg sm:text-2xl font-bold text-primary-text flex items-center gap-2">
               Appointment Scheduling
-              <HeartHandshake className="h-5 w-5 text-cyan-400" />
+              <HeartHandshake className="h-5 w-5 text-primary-green" />
             </h1>
-            <p className="text-sm text-slate-400 mt-0.5">
+            <p className="text-sm text-secondary-text mt-0.5">
               Book consultations, handle clinic receipts, and manage clinical assignments.
             </p>
           </div>
@@ -251,7 +437,7 @@ function AppointmentsContent() {
             <button
               id="btn-new-appointment"
               onClick={handleOpenCreate}
-              className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-white bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 rounded-xl cursor-pointer transition-all shadow-md shadow-cyan-950/20"
+              className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-white bg-primary-green hover:bg-primary-green-hover rounded-xl cursor-pointer transition-all shadow-sm"
             >
               <Plus className="h-4.5 w-4.5" />
               Schedule Appointment
@@ -261,38 +447,38 @@ function AppointmentsContent() {
 
         {/* Global Feedback Panels */}
         {error && (
-          <div className="p-4 rounded-xl bg-red-950/40 border border-red-500/20 text-xs text-red-400 flex items-center gap-2">
+          <div className="p-4 rounded-xl bg-alert-bg border border-alert-border text-xs text-alert-text flex items-center gap-2">
             <ShieldAlert className="h-4.5 w-4.5" />
             {error}
           </div>
         )}
         {success && (
-          <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-500/20 text-xs text-emerald-400 flex items-center gap-2">
+          <div className="p-4 rounded-xl bg-very-light-green border border-light-green/50 text-xs text-primary-text flex items-center gap-2">
             <CheckCircle className="h-4.5 w-4.5" />
             {success}
           </div>
         )}
 
         {/* Search and filter panel */}
-        <div className="flex flex-col md:flex-row gap-4 bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+        <div className="flex flex-col gap-3 bg-white border border-border-gray p-3 rounded-xl">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-3 h-4.5 w-4.5 text-slate-500" />
+            <Search className="absolute left-3 top-3 h-4.5 w-4.5 text-secondary-text/60" />
             <input
               id="search-input"
               type="text"
               placeholder="Search by Patient name, Phone number, or Doctor..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 rounded-xl py-2.5 pl-10 pr-4 text-xs text-slate-200 placeholder-slate-600 outline-none transition-all"
+              className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2.5 pl-10 pr-4 text-xs text-secondary-text placeholder-slate-400 outline-none transition-all"
             />
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
-              <Filter className="h-3.5 w-3.5 text-slate-500" />
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 text-xs text-secondary-text font-medium">
+              <Filter className="h-3.5 w-3.5 text-secondary-text/60" />
               <span>Status Filter:</span>
             </div>
-            <div className="flex gap-1">
+            <div className="flex flex-wrap gap-1">
               {['All', 'Unpaid', 'Partially Paid', 'Completed'].map((opt) => (
                 <button
                   key={opt}
@@ -300,8 +486,8 @@ function AppointmentsContent() {
                   onClick={() => setPaymentFilter(opt)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
                     paymentFilter === opt
-                      ? 'bg-cyan-950/60 text-cyan-300 border border-cyan-500/30'
-                      : 'bg-slate-950 text-slate-400 border border-slate-850 hover:bg-slate-850'
+                      ? 'bg-light-green text-primary-green border border-primary-green/30'
+                      : 'bg-white text-secondary-text border border-border-gray hover:bg-very-light-green hover:text-primary-green'
                   }`}
                 >
                   {opt}
@@ -314,16 +500,16 @@ function AppointmentsContent() {
         {/* List of Appointments (Desktop/Tablet Card list) */}
         {loading ? (
           <div className="flex h-48 items-center justify-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-cyan-500 border-t-transparent"></div>
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div>
           </div>
         ) : filteredAppointments.length === 0 ? (
-          <div className="bg-slate-900/60 border border-slate-850 p-12 text-center rounded-2xl flex flex-col items-center justify-center">
-            <CalendarIcon className="h-10 w-10 text-slate-600 mb-3" />
-            <p className="text-slate-400 text-sm font-medium">No matching appointments found.</p>
-            <p className="text-xs text-slate-500 mt-1">Book your first patient consultation using the Schedule button.</p>
+          <div className="bg-white border border-border-gray p-12 text-center rounded-2xl flex flex-col items-center justify-center">
+            <CalendarIcon className="h-10 w-10 text-secondary-text/40 mb-3" />
+            <p className="text-secondary-text text-sm font-medium">No matching appointments found.</p>
+            <p className="text-xs text-secondary-text/80 mt-1">Book your first patient consultation using the Schedule button.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {filteredAppointments.map((app) => {
               const editStatus = getEditLockStatus(app);
               const appDate = new Date(app.appointment_date);
@@ -334,62 +520,67 @@ function AppointmentsContent() {
                   id={`appointment-card-${app.id}`}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between hover:border-slate-700 transition-all duration-200"
+                  className="bg-white border border-border-gray rounded-xl sm:rounded-2xl p-4 sm:p-5 flex flex-col justify-between hover:border-light-green hover:shadow-sm transition-all duration-200"
                 >
                   <div>
                     {/* Header: Name and Lock Status */}
                     <div className="flex justify-between items-start gap-2 mb-3">
                       <div>
-                        <h3 className="font-bold text-slate-200 text-sm leading-tight truncate">{app.patient_name}</h3>
-                        <p className="text-[10px] text-slate-400 mt-0.5 font-medium">
+                        <h3 
+                          onClick={() => handleOpenDetails(app)} 
+                          className="font-bold text-primary-text text-sm leading-tight truncate cursor-pointer hover:text-primary-green hover:underline decoration-2"
+                        >
+                          {app.patient_name}
+                        </h3>
+                        <p className="text-[10px] text-secondary-text mt-0.5 font-medium">
                           {app.age} yrs • {app.gender} • {app.contact_number}
                         </p>
                       </div>
                       
                       {editStatus.locked ? (
-                        <div className="p-1 bg-slate-950 rounded-lg text-rose-400 border border-rose-900/20" title={editStatus.reason}>
+                        <div className="p-1 bg-alert-bg rounded-lg text-alert-text border border-alert-border/40" title={editStatus.reason}>
                           <Lock className="h-3.5 w-3.5" />
                         </div>
                       ) : (
-                        <div className="p-1 bg-slate-950 rounded-lg text-cyan-400 border border-cyan-900/20" title={editStatus.reason}>
+                        <div className="p-1 bg-very-light-green rounded-lg text-primary-green border border-light-green/40" title={editStatus.reason}>
                           <Clock className="h-3.5 w-3.5" />
                         </div>
                       )}
                     </div>
 
                     {/* Date and Clinical Assignment */}
-                    <div className="space-y-2.5 bg-slate-950/60 border border-slate-850 p-3 rounded-xl mb-4">
-                      <div className="flex items-center gap-2 text-xs text-slate-300">
-                        <CalendarIcon className="h-3.5 w-3.5 text-cyan-400" />
+                    <div className="space-y-2.5 bg-secondary-bg border border-border-gray p-2.5 sm:p-3 rounded-xl mb-3">
+                      <div className="flex items-center gap-2 text-xs text-secondary-text">
+                        <CalendarIcon className="h-3.5 w-3.5 text-primary-green" />
                         <span>
                           {appDate.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })} • {appDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-slate-400">
-                        <User className="h-3.5 w-3.5 text-slate-500" />
-                        <span>Doctor: <strong className="text-slate-300">{app.doctor_name || 'Unassigned'}</strong></span>
+                      <div className="flex items-center gap-2 text-xs text-secondary-text">
+                        <User className="h-3.5 w-3.5 text-secondary-text/60" />
+                        <span>Doctor: <strong className="text-primary-text">{app.doctor_name || 'Unassigned'}</strong></span>
                       </div>
-                      <div className="text-[10px] text-slate-500 border-t border-slate-850/80 pt-2 truncate">
-                        Hospital: <span className="text-slate-400">{app.hospital_name || 'N/A'}</span>
+                      <div className="text-[10px] text-secondary-text/80 border-t border-border-gray pt-2 truncate">
+                        Hospital: <span className="text-secondary-text font-medium">{app.hospital_name || 'N/A'}</span>
                       </div>
                     </div>
 
                     {/* Financial Summary */}
-                    <div className="flex items-center justify-between p-2.5 bg-slate-950/20 border border-slate-850 rounded-lg text-xs mb-4">
+                    <div className="flex items-center justify-between p-2.5 bg-secondary-bg border border-border-gray rounded-lg text-xs mb-3">
                       <div>
-                        <span className="text-[10px] text-slate-500 block font-semibold">Total Fee</span>
-                        <strong className="text-slate-200">₹{app.total_amount}</strong>
+                        <span className="text-[10px] text-secondary-text block font-semibold">Total Fee</span>
+                        <strong className="text-primary-text">₹{app.total_amount}</strong>
                       </div>
                       <div className="text-right">
-                        <span className="text-[10px] text-slate-500 block font-semibold">Paid</span>
-                        <strong className="text-emerald-400">₹{app.paid_amount}</strong>
+                        <span className="text-[10px] text-secondary-text block font-semibold">Paid</span>
+                        <strong className="text-primary-green">₹{app.paid_amount}</strong>
                       </div>
                       <div className="text-right">
-                        <span className="text-[10px] text-slate-500 block font-semibold">Status</span>
+                        <span className="text-[10px] text-secondary-text block font-semibold">Status</span>
                         <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                          app.payment_status === 'Completed' ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/20' :
-                          app.payment_status === 'Partially Paid' ? 'bg-amber-950 text-amber-400 border border-amber-500/20' :
-                          'bg-rose-950 text-rose-400 border border-rose-500/20'
+                          app.payment_status === 'Completed' ? 'bg-very-light-green text-primary-green border border-light-green' :
+                          app.payment_status === 'Partially Paid' ? 'bg-secondary-bg text-secondary-text border border-border-gray' :
+                          'bg-alert-bg text-alert-text border border-alert-border'
                         }`}>
                           {app.payment_status}
                         </span>
@@ -397,21 +588,21 @@ function AppointmentsContent() {
                     </div>
 
                     {app.notes && (
-                      <p className="text-[10px] text-slate-400 italic mb-4 leading-normal bg-slate-950/20 p-2.5 rounded-lg border border-slate-850/40">
+                      <p className="text-[10px] text-secondary-text italic mb-3 leading-normal bg-secondary-bg p-2.5 rounded-lg border border-border-gray/40">
                         "{app.notes}"
                       </p>
                     )}
                   </div>
 
                   {/* Actions Drawer */}
-                  <div className="flex items-center justify-between border-t border-slate-850/80 pt-3.5 gap-2">
+                  <div className="flex items-center justify-between border-t border-border-gray pt-3.5 gap-2">
                     
                     {/* Add Payment action for Reception/Admin */}
                     {['Admin', 'Reception'].includes(user?.role || '') && app.payment_status !== 'Completed' ? (
                       <button
                         id={`btn-pay-${app.id}`}
                         onClick={() => handleOpenPayment(app)}
-                        className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-950/40 border border-emerald-800/30 px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors"
+                        className="flex items-center gap-1 text-[10px] font-bold text-primary-green hover:text-primary-green-hover bg-very-light-green border border-light-green px-2.5 py-1.5 rounded-lg cursor-pointer transition-colors"
                       >
                         <IndianRupee className="h-3 w-3" />
                         Log Payment
@@ -419,21 +610,42 @@ function AppointmentsContent() {
                     ) : <div />}
 
                     <div className="flex items-center gap-1.5">
-                      {!editStatus.locked && (
-                        <button
-                          id={`btn-edit-${app.id}`}
-                          onClick={() => handleOpenEdit(app)}
-                          className="p-2 text-slate-400 hover:text-cyan-400 hover:bg-slate-800/50 rounded-lg cursor-pointer transition-all"
-                          title="Edit Appointment"
-                        >
-                          <Edit3 className="h-3.5 w-3.5" />
-                        </button>
+                      {editStatus.countdown && (
+                        <span className="text-[10px] text-primary-green font-semibold animate-pulse bg-very-light-green border border-light-green/40 px-2.5 py-1 rounded-lg">
+                          {editStatus.countdown}
+                        </span>
                       )}
-                      {['Admin', 'Chief Doctor'].includes(user?.role || '') && (
+                      {editStatus.locked && (
+                        <span className="text-[10px] text-secondary-text/60 font-semibold bg-secondary-bg border border-border-gray px-2.5 py-1 rounded-lg" title={editStatus.reason}>
+                          Locked
+                        </span>
+                      )}
+                      <button
+                        id={`btn-details-${app.id}`}
+                        onClick={() => handleOpenDetails(app)}
+                        className="p-2 text-secondary-text hover:text-primary-green hover:bg-very-light-green rounded-lg cursor-pointer transition-all border border-transparent"
+                        title="View Details & History"
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        id={`btn-edit-${app.id}`}
+                        onClick={() => !editStatus.locked && handleOpenEdit(app)}
+                        disabled={editStatus.locked}
+                        className={`p-2 rounded-lg transition-all ${
+                          editStatus.locked 
+                            ? 'text-secondary-text/30 cursor-not-allowed bg-secondary-bg border border-border-gray' 
+                            : 'text-secondary-text hover:text-primary-green hover:bg-very-light-green cursor-pointer'
+                        }`}
+                        title={editStatus.locked ? editStatus.reason : 'Edit Appointment'}
+                      >
+                        <Edit3 className="h-3.5 w-3.5" />
+                      </button>
+                      {['Admin', 'Chief Doctor', 'Superadmin'].includes(user?.role || '') && (
                         <button
                           id={`btn-delete-${app.id}`}
                           onClick={() => handleDelete(app.id)}
-                          className="p-2 text-slate-400 hover:text-rose-400 hover:bg-slate-800/50 rounded-lg cursor-pointer transition-all"
+                          className="p-2 text-secondary-text hover:text-alert-text hover:bg-alert-bg rounded-lg cursor-pointer transition-all border border-transparent hover:border-alert-border"
                           title="Cancel/Delete"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -453,24 +665,24 @@ function AppointmentsContent() {
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
               <motion.div 
                 initial={{ opacity: 0 }}
-                animate={{ opacity: 0.6 }}
+                animate={{ opacity: 0.4 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setIsFormOpen(false)}
-                className="fixed inset-0 bg-black"
+                className="fixed inset-0 bg-slate-900"
               />
               
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col max-h-[90vh]"
+                className="w-full max-w-lg bg-white border border-border-gray rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col max-h-[90vh]"
               >
-                <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/80">
-                  <h3 className="font-bold text-sm text-slate-100 flex items-center gap-1.5">
-                    <Sparkles className="h-4.5 w-4.5 text-cyan-400 animate-pulse" />
+                <div className="px-6 py-4 border-b border-border-gray flex items-center justify-between bg-secondary-bg">
+                  <h3 className="font-bold text-sm text-primary-text flex items-center gap-1.5">
+                    <Sparkles className="h-4.5 w-4.5 text-primary-green animate-pulse" />
                     {selectedApp ? 'Modify Appointment Record' : 'Create Appointment Record'}
                   </h3>
-                  <button id="close-form-modal" onClick={() => setIsFormOpen(false)} className="text-slate-400 hover:text-white cursor-pointer">
+                  <button id="close-form-modal" onClick={() => setIsFormOpen(false)} className="text-secondary-text hover:text-primary-green cursor-pointer">
                     <X className="h-4.5 w-4.5" />
                   </button>
                 </div>
@@ -479,35 +691,41 @@ function AppointmentsContent() {
                   {/* Grid 1: Name and Contact */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Patient Name</label>
+                      <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Patient Name</label>
                       <input
                         id="form-patient-name"
                         type="text"
                         required
                         value={patientName}
-                        onChange={(e) => setPatientName(e.target.value)}
+                        onChange={(e) => handlePatientNameChange(e.target.value)}
                         placeholder="John Doe"
-                        className="w-full bg-slate-950 border border-slate-850 focus:border-cyan-500 rounded-xl py-2 px-3 text-xs text-slate-200 outline-none"
+                        className={`w-full bg-white border ${patientNameError ? 'border-red-500 focus:border-red-500 focus:ring-red-100' : 'border-border-gray focus:border-primary-green focus:ring-light-green'} focus:ring-1 rounded-xl py-2 px-3 text-xs text-secondary-text outline-none`}
                       />
+                      {patientNameError && (
+                        <p className="text-[10px] text-rose-700 mt-1 font-semibold">{patientNameError}</p>
+                      )}
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Contact Number</label>
+                      <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Contact Number</label>
                       <input
                         id="form-contact-number"
                         type="tel"
                         required
                         value={contactNumber}
-                        onChange={(e) => setContactNumber(e.target.value)}
+                        onChange={(e) => handleContactNumberChange(e.target.value)}
                         placeholder="9876543210"
-                        className="w-full bg-slate-950 border border-slate-850 focus:border-cyan-500 rounded-xl py-2 px-3 text-xs text-slate-200 outline-none"
+                        className={`w-full bg-white border ${contactNumberError ? 'border-red-500 focus:border-red-500 focus:ring-red-100' : 'border-border-gray focus:border-primary-green focus:ring-light-green'} focus:ring-1 rounded-xl py-2 px-3 text-xs text-secondary-text outline-none`}
                       />
+                      {contactNumberError && (
+                        <p className="text-[10px] text-rose-700 mt-1 font-semibold">{contactNumberError}</p>
+                      )}
                     </div>
                   </div>
 
                   {/* Grid 2: Age and Gender */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Patient Age</label>
+                      <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Patient Age</label>
                       <input
                         id="form-age"
                         type="number"
@@ -517,16 +735,16 @@ function AppointmentsContent() {
                         value={age}
                         onChange={(e) => setAge(e.target.value)}
                         placeholder="35"
-                        className="w-full bg-slate-950 border border-slate-850 focus:border-cyan-500 rounded-xl py-2 px-3 text-xs text-slate-200 outline-none"
+                        className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-secondary-text outline-none"
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Gender</label>
+                      <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Gender</label>
                       <select
                         id="form-gender"
                         value={gender}
                         onChange={(e) => setGender(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-850 focus:border-cyan-500 rounded-xl py-2 px-3 text-xs text-slate-200 outline-none"
+                        className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-secondary-text outline-none"
                       >
                         <option value="Male">Male</option>
                         <option value="Female">Female</option>
@@ -538,13 +756,13 @@ function AppointmentsContent() {
                   {/* Grid 3: Doctor and Hospital */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Assigned Clinician</label>
+                      <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Assigned Clinician</label>
                       <select
                         id="form-doctor-id"
                         required
                         value={doctorId}
                         onChange={(e) => setDoctorId(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-850 focus:border-cyan-500 rounded-xl py-2 px-3 text-xs text-slate-200 outline-none"
+                        className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-secondary-text outline-none"
                       >
                         {doctors.map(d => (
                           <option key={d.id} value={d.id}>🩺 {d.name} ({d.role})</option>
@@ -552,16 +770,16 @@ function AppointmentsContent() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Foundation Hospital</label>
+                      <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Foundation Hospital</label>
                       <select
                         id="form-hospital-id"
                         required
                         value={hospitalId}
                         onChange={(e) => setHospitalId(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-850 focus:border-cyan-500 rounded-xl py-2 px-3 text-xs text-slate-200 outline-none"
+                        className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-secondary-text outline-none"
                       >
                         {hospitals.map(h => (
-                          <option key={h.id} value={h.id}>🏥 {h.name} ({h.city})</option>
+                          <option key={h.id} value={h.id}>🏥 {h.name} ({h.hospital_uid || 'UID Pending'} - {h.city})</option>
                         ))}
                       </select>
                     </div>
@@ -570,57 +788,68 @@ function AppointmentsContent() {
                   {/* Grid 4: Consultation Date & Fee */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Appointment Schedule</label>
+                      <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Appointment Schedule</label>
                       <input
                         id="form-appointment-date"
                         type="datetime-local"
                         required
+                        min={selectedApp ? undefined : getTodayMinStr()}
                         value={appointmentDate}
-                        onChange={(e) => setAppointmentDate(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-850 focus:border-cyan-500 rounded-xl py-2 px-3 text-xs text-slate-200 outline-none"
+                        onChange={(e) => handleAppointmentDateChange(e.target.value)}
+                        className={`w-full bg-white border ${appointmentDateError ? 'border-red-500 focus:border-red-500 focus:ring-red-100' : 'border-border-gray focus:border-primary-green focus:ring-light-green'} focus:ring-1 rounded-xl py-2 px-3 text-xs text-secondary-text outline-none`}
                       />
+                      {appointmentDateError && (
+                        <p className="text-[10px] text-rose-700 mt-1 font-semibold">{appointmentDateError}</p>
+                      )}
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Consultation Total Fee (₹)</label>
+                      <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Consultation Total Fee (₹)</label>
                       <input
                         id="form-total-amount"
-                        type="number"
+                        type="text"
                         required
                         value={totalAmount}
-                        onChange={(e) => setTotalAmount(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-850 focus:border-cyan-500 rounded-xl py-2 px-3 text-xs text-slate-200 outline-none"
+                        onChange={(e) => handleTotalAmountChange(e.target.value)}
+                        className={`w-full bg-white border ${totalAmountError ? 'border-red-500 focus:border-red-500 focus:ring-red-100' : 'border-border-gray focus:border-primary-green focus:ring-light-green'} focus:ring-1 rounded-xl py-2 px-3 text-xs text-secondary-text outline-none`}
                       />
+                      {totalAmountError && (
+                        <p className="text-[10px] text-rose-700 mt-1 font-semibold">{totalAmountError}</p>
+                      )}
                     </div>
                   </div>
 
                   {/* Notes Area */}
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Diagnostic / Visit Notes</label>
+                    <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Diagnostic / Visit Notes</label>
                     <textarea
                       id="form-notes"
                       rows={3}
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
                       placeholder="Symptoms, previous records reference, clinical indications..."
-                      className="w-full bg-slate-950 border border-slate-850 focus:border-cyan-500 rounded-xl p-3 text-xs text-slate-200 outline-none resize-none"
+                      className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl p-3 text-xs text-secondary-text outline-none resize-none"
                     />
                   </div>
 
                   {/* Action row */}
-                  <div className="pt-4 border-t border-slate-850 flex items-center justify-end gap-2.5">
+                  <div className="pt-4 border-t border-border-gray flex items-center justify-end gap-2.5">
                     <button
                       id="btn-cancel-form"
                       type="button"
                       onClick={() => setIsFormOpen(false)}
-                      className="px-4 py-2 border border-slate-800 hover:bg-slate-850 text-xs text-slate-400 rounded-xl transition-all cursor-pointer font-semibold"
+                      className="px-4 py-2 border border-border-gray hover:bg-secondary-bg text-xs text-secondary-text rounded-xl transition-all cursor-pointer font-semibold"
                     >
                       Cancel
                     </button>
                     <button
                       id="btn-submit-form"
                       type="submit"
-                      disabled={submitLoading}
-                      className="px-5 py-2 text-xs font-semibold text-white bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 rounded-xl cursor-pointer transition-all flex items-center gap-1.5"
+                      disabled={submitLoading || !!patientNameError || !!contactNumberError || !!appointmentDateError || !!totalAmountError}
+                      className={`px-5 py-2 text-xs font-semibold text-white bg-primary-green hover:bg-primary-green-hover rounded-xl transition-all flex items-center gap-1.5 ${
+                        (submitLoading || !!patientNameError || !!contactNumberError || !!appointmentDateError || !!totalAmountError)
+                          ? 'opacity-50 cursor-not-allowed'
+                          : 'cursor-pointer'
+                      }`}
                     >
                       {submitLoading ? 'Submitting...' : 'Register Record'}
                     </button>
@@ -637,54 +866,54 @@ function AppointmentsContent() {
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
               <motion.div 
                 initial={{ opacity: 0 }}
-                animate={{ opacity: 0.6 }}
+                animate={{ opacity: 0.4 }}
                 exit={{ opacity: 0 }}
                 onClick={() => setIsPaymentOpen(false)}
-                className="fixed inset-0 bg-black"
+                className="fixed inset-0 bg-slate-900"
               />
-
+              
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col"
+                className="w-full max-w-md bg-white border border-border-gray rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col max-h-[90vh]"
               >
-                <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
-                  <h3 className="font-bold text-sm text-slate-100 flex items-center gap-1.5">
-                    <IndianRupee className="h-4.5 w-4.5 text-emerald-400 animate-pulse" />
+                <div className="px-6 py-4 border-b border-border-gray flex items-center justify-between bg-secondary-bg">
+                  <h3 className="font-bold text-sm text-primary-text flex items-center gap-1.5">
+                    <IndianRupee className="h-4.5 w-4.5 text-primary-green animate-pulse" />
                     Log Consultation Transaction
                   </h3>
-                  <button id="close-payment-modal" onClick={() => setIsPaymentOpen(false)} className="text-slate-400 hover:text-white cursor-pointer">
+                  <button id="close-payment-modal" onClick={() => setIsPaymentOpen(false)} className="text-secondary-text hover:text-primary-green cursor-pointer">
                     <X className="h-4.5 w-4.5" />
                   </button>
                 </div>
-
-                <form onSubmit={handlePaymentSubmit} className="p-6 space-y-4">
+ 
+                <form onSubmit={handlePaymentSubmit} className="p-6 space-y-4 flex-1 overflow-y-auto">
                   <div>
-                    <span className="text-[10px] text-slate-400 block mb-1">Receipt for Patient:</span>
-                    <strong className="text-sm text-slate-200 block">{selectedApp?.patient_name}</strong>
+                    <span className="text-[10px] text-secondary-text block mb-1">Receipt for Patient:</span>
+                    <strong className="text-sm text-primary-text block">{selectedApp?.patient_name}</strong>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Payment Amount (₹)</label>
+                      <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Payment Amount (₹)</label>
                       <input
                         id="payment-amount"
                         type="number"
                         required
                         value={paymentAmount}
                         onChange={(e) => setPaymentAmount(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-850 focus:border-cyan-500 rounded-xl py-2.5 px-3 text-xs text-slate-200 outline-none"
+                        className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2.5 px-3 text-xs text-secondary-text outline-none"
                       />
                     </div>
                     
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Payment Method</label>
+                      <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Payment Method</label>
                       <select
                         id="payment-method"
                         value={paymentMethod}
                         onChange={(e) => setPaymentMethod(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-850 focus:border-cyan-500 rounded-xl py-2.5 px-3 text-xs text-slate-200 outline-none"
+                        className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2.5 px-3 text-xs text-secondary-text outline-none"
                       >
                         <option value="Digital (UPI/Card)">UPI / GPay / PhonePe</option>
                         <option value="Cash Receipt">Cash Desk</option>
@@ -694,35 +923,35 @@ function AppointmentsContent() {
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Reference Transaction ID / UTR (Optional)</label>
+                    <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Reference Transaction ID / UTR (Optional)</label>
                     <input
                       id="payment-reference"
                       type="text"
                       value={transactionRef}
                       onChange={(e) => setTransactionRef(e.target.value)}
                       placeholder="TXN987654321"
-                      className="w-full bg-slate-950 border border-slate-850 focus:border-cyan-500 rounded-xl py-2.5 px-3 text-xs text-slate-200 outline-none"
+                      className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2.5 px-3 text-xs text-secondary-text outline-none"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Transaction Notes</label>
+                    <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Transaction Notes</label>
                     <input
                       id="payment-notes"
                       type="text"
                       value={paymentNotes}
                       onChange={(e) => setPaymentNotes(e.target.value)}
                       placeholder="Consultation co-pay, surgery deposit..."
-                      className="w-full bg-slate-950 border border-slate-850 focus:border-cyan-500 rounded-xl py-2.5 px-3 text-xs text-slate-200 outline-none"
+                      className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2.5 px-3 text-xs text-secondary-text outline-none"
                     />
                   </div>
 
-                  <div className="pt-4 border-t border-slate-850 flex items-center justify-end gap-2.5">
+                  <div className="pt-4 border-t border-border-gray flex items-center justify-end gap-2.5">
                     <button
                       id="btn-cancel-payment"
                       type="button"
                       onClick={() => setIsPaymentOpen(false)}
-                      className="px-4 py-2 border border-slate-800 hover:bg-slate-850 text-xs text-slate-400 rounded-xl transition-all cursor-pointer font-semibold"
+                      className="px-4 py-2 border border-border-gray hover:bg-secondary-bg text-xs text-secondary-text rounded-xl transition-all cursor-pointer font-semibold"
                     >
                       Cancel
                     </button>
@@ -730,12 +959,196 @@ function AppointmentsContent() {
                       id="btn-submit-payment"
                       type="submit"
                       disabled={submitLoading}
-                      className="px-5 py-2 text-xs font-semibold text-white bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 rounded-xl cursor-pointer transition-all flex items-center gap-1.5 shadow-md shadow-emerald-950/20"
+                      className="px-5 py-2 text-xs font-semibold text-white bg-primary-green hover:bg-primary-green-hover rounded-xl cursor-pointer transition-all flex items-center gap-1.5 shadow-sm"
                     >
                       {submitLoading ? 'Logging...' : 'Clear Amount'}
                     </button>
                   </div>
                 </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Modal: Appointment Details & Edit History */}
+        <AnimatePresence>
+          {isDetailsOpen && selectedAppForDetails && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 0.4 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsDetailsOpen(false)}
+                className="fixed inset-0 bg-slate-900"
+              />
+              
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="w-full max-w-2xl bg-white border border-border-gray rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col max-h-[90vh]"
+              >
+                <div className="px-6 py-4 border-b border-border-gray flex items-center justify-between bg-secondary-bg">
+                  <h3 className="font-bold text-sm text-primary-text flex items-center gap-1.5">
+                    <Eye className="h-4.5 w-4.5 text-primary-green" />
+                    Appointment Details & Audit Trail
+                  </h3>
+                  <button id="close-details-modal" onClick={() => setIsDetailsOpen(false)} className="text-secondary-text hover:text-primary-green cursor-pointer">
+                    <X className="h-4.5 w-4.5" />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                  {/* Grid Layout: Details Left, History Right */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Left Column: Patient Details */}
+                    <div className="space-y-4">
+                      <div>
+                        <h4 className="text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-2">Patient Information</h4>
+                        <div className="bg-secondary-bg border border-border-gray p-4 rounded-xl space-y-3">
+                          <div>
+                            <span className="text-[10px] text-secondary-text block">Name</span>
+                            <span className="text-sm font-bold text-primary-text">{selectedAppForDetails.patient_name}</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="text-[10px] text-secondary-text block">Age & Gender</span>
+                              <span className="text-xs font-semibold text-primary-text">{selectedAppForDetails.age} yrs • {selectedAppForDetails.gender}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-secondary-text block">Contact</span>
+                              <span className="text-xs font-semibold text-primary-text">{selectedAppForDetails.contact_number}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 className="text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-2">Clinical Assignment</h4>
+                        <div className="bg-secondary-bg border border-border-gray p-4 rounded-xl space-y-3">
+                          <div>
+                            <span className="text-[10px] text-secondary-text block">Assigned Doctor</span>
+                            <span className="text-xs font-semibold text-primary-text">🩺 {selectedAppForDetails.doctor_name || 'Unassigned'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-secondary-text block">Foundation Hospital</span>
+                            <span className="text-xs font-semibold text-primary-text">🏥 {selectedAppForDetails.hospital_name || 'N/A'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-secondary-text block">Schedule Date</span>
+                            <span className="text-xs font-semibold text-primary-text">
+                              📅 {new Date(selectedAppForDetails.appointment_date).toLocaleString('en-IN', {
+                                weekday: 'short', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                              })}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 className="text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-2">Financial Status</h4>
+                        <div className="bg-secondary-bg border border-border-gray p-4 rounded-xl">
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <span className="text-[10px] text-secondary-text block">Total Fee</span>
+                              <span className="text-xs font-bold text-primary-text">₹{selectedAppForDetails.total_amount}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-secondary-text block">Paid</span>
+                              <span className="text-xs font-bold text-primary-green">₹{selectedAppForDetails.paid_amount}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-secondary-text block">Outstanding</span>
+                              <span className="text-xs font-bold text-alert-text">₹{selectedAppForDetails.total_amount - selectedAppForDetails.paid_amount}</span>
+                            </div>
+                          </div>
+                          <div className="mt-3 pt-3 border-t border-border-gray/50 flex justify-between items-center">
+                            <span className="text-[10px] text-secondary-text">Payment Status</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                              selectedAppForDetails.payment_status === 'Completed' ? 'bg-very-light-green text-primary-green border border-light-green' :
+                              selectedAppForDetails.payment_status === 'Partially Paid' ? 'bg-secondary-bg text-secondary-text border border-border-gray' :
+                              'bg-alert-bg text-alert-text border border-alert-border'
+                            }`}>
+                              {selectedAppForDetails.payment_status}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {selectedAppForDetails.notes && (
+                        <div>
+                          <h4 className="text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-2">Diagnostic Notes</h4>
+                          <div className="bg-secondary-bg border border-border-gray p-3 rounded-xl text-xs text-secondary-text italic">
+                            "{selectedAppForDetails.notes}"
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Right Column: Edit History Timeline */}
+                    <div className="flex flex-col h-full border-t md:border-t-0 md:border-l border-border-gray pt-4 md:pt-0 md:pl-6">
+                      <h4 className="text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-3">Audit Logs & Edit History</h4>
+                      
+                      <div className="flex-1 overflow-y-auto max-h-[40vh] md:max-h-[50vh] pr-1 space-y-4">
+                        {historyLoading ? (
+                          <div className="flex h-32 items-center justify-center">
+                            <div className="h-6 w-6 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent"></div>
+                          </div>
+                        ) : editHistory.length === 0 ? (
+                          <div className="text-center py-8 bg-secondary-bg/50 border border-dashed border-border-gray rounded-xl">
+                            <p className="text-xs text-secondary-text italic">No edit history recorded.</p>
+                            <p className="text-[10px] text-secondary-text/80 mt-1">Updates to this appointment will be tracked here.</p>
+                          </div>
+                        ) : (
+                          <div className="relative pl-4 border-l border-border-gray space-y-4">
+                            {editHistory.map((log: any) => {
+                              const summaries = log.change_summary 
+                                ? log.change_summary.split('\n').map((s: string) => s.replace(/^•\s*/, '')).filter(Boolean)
+                                : [];
+                              return (
+                                <div key={log.id} className="relative text-xs">
+                                  {/* Dot */}
+                                  <div className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full bg-primary-green ring-4 ring-white" />
+                                  
+                                  <div className="bg-secondary-bg/60 border border-border-gray/50 rounded-xl p-3 space-y-1.5 hover:border-light-green transition-all">
+                                    <div className="flex items-center justify-between text-[10px] text-secondary-text flex-wrap gap-1">
+                                      <span className="font-bold text-primary-text">{log.edited_by_name}</span>
+                                      <span className="text-[9px] bg-white border border-border-gray/80 px-1.5 py-0.5 rounded text-secondary-text uppercase font-semibold">
+                                        {log.edited_by_designation}
+                                      </span>
+                                    </div>
+                                    <p className="text-[9px] text-secondary-text">
+                                      {new Date(log.edited_at).toLocaleString('en-IN')}
+                                    </p>
+                                    
+                                    <ul className="space-y-1 pt-1 border-t border-border-gray/40">
+                                      {summaries.map((s: string, idx: number) => (
+                                        <li key={idx} className="text-[10px] text-secondary-text list-disc pl-0.5 ml-3">
+                                          {s}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="px-6 py-4 border-t border-border-gray flex items-center justify-end bg-secondary-bg gap-2.5">
+                  <button
+                    id="btn-close-details"
+                    type="button"
+                    onClick={() => setIsDetailsOpen(false)}
+                    className="px-5 py-2 text-xs font-semibold text-white bg-primary-green hover:bg-primary-green-hover rounded-xl transition-all cursor-pointer shadow-sm"
+                  >
+                    Close
+                  </button>
+                </div>
               </motion.div>
             </div>
           )}
@@ -751,7 +1164,7 @@ export default function AppointmentsPage() {
     <Suspense fallback={
       <DashboardLayout>
         <div className="flex h-screen items-center justify-center">
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-500 border-t-transparent"></div>
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div>
         </div>
       </DashboardLayout>
     }>

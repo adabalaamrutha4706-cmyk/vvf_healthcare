@@ -10,19 +10,19 @@ export const getLeads = async (req: AuthenticatedRequest, res: Response) => {
 
     let result;
     if (userRole === 'Telecaller') {
-      // Telecallers see leads assigned to them or unassigned
+      // Telecallers see leads assigned to them only
       result = await query(
-        `SELECT l.*, u.name as assigned_to_name 
+        `SELECT l.*, u.name as assigned_name 
          FROM leads l
          LEFT JOIN users u ON l.assigned_to = u.id
-         WHERE l.is_deleted = false AND (l.assigned_to = $1 OR l.assigned_to IS NULL)
+         WHERE l.is_deleted = false AND l.assigned_to = $1
          ORDER BY l.created_at DESC`,
         [userId]
       );
     } else {
       // Admin and others see all leads
       result = await query(
-        `SELECT l.*, u.name as assigned_to_name 
+        `SELECT l.*, u.name as assigned_name 
          FROM leads l
          LEFT JOIN users u ON l.assigned_to = u.id
          WHERE l.is_deleted = false
@@ -30,30 +30,76 @@ export const getLeads = async (req: AuthenticatedRequest, res: Response) => {
       );
     }
 
-    return res.status(200).json({ leads: result.rows });
+    return res.status(200).json({
+      success: true,
+      data: { leads: result.rows },
+      leads: result.rows
+    });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Internal server error.' });
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Internal server error.',
+      errorCode: 'INTERNAL_ERROR',
+      error: err.message || 'Internal server error.'
+    });
   }
 };
 
 export const getLeadById = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
+    const leadId = parseInt(id, 10);
+    if (isNaN(leadId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid lead ID format. Must be an integer.',
+        errorCode: 'VALIDATION_ERROR',
+        error: 'Invalid lead ID format. Must be an integer.'
+      });
+    }
+
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
+
     const result = await query(
-      `SELECT l.*, u.name as assigned_to_name 
+      `SELECT l.*, u.name as assigned_name 
        FROM leads l
        LEFT JOIN users u ON l.assigned_to = u.id
        WHERE l.id = $1 AND l.is_deleted = false`,
-      [id]
+      [leadId]
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Lead not found.' });
+      return res.status(404).json({
+        success: false,
+        message: 'Lead not found.',
+        errorCode: 'LEAD_NOT_FOUND',
+        error: 'Lead not found.'
+      });
     }
 
-    return res.status(200).json({ lead: result.rows[0] });
+    const lead = result.rows[0];
+    if (userRole === 'Telecaller' && lead.assigned_to !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You can only view leads assigned to you.',
+        errorCode: 'ACCESS_DENIED',
+        error: 'Access denied. You can only view leads assigned to you.'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: { lead },
+      lead
+    });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Internal server error.' });
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Internal server error.',
+      errorCode: 'INTERNAL_ERROR',
+      error: err.message || 'Internal server error.'
+    });
   }
 };
 
@@ -65,7 +111,12 @@ export const createLead = async (req: AuthenticatedRequest, res: Response) => {
     const { patient_name, contact_number, status, notes, callback_time, assigned_to } = req.body;
 
     if (!patient_name || !contact_number) {
-      return res.status(400).json({ error: 'Patient name and contact number are required.' });
+      return res.status(400).json({
+        success: false,
+        message: 'Patient name and contact number are required.',
+        errorCode: 'VALIDATION_ERROR',
+        error: 'Patient name and contact number are required.'
+      });
     }
 
     const assignedId = assigned_to ? parseInt(assigned_to, 10) : userId;
@@ -93,12 +144,23 @@ export const createLead = async (req: AuthenticatedRequest, res: Response) => {
       `Lead created for ${patient_name} by ${userName}`
     );
 
-    return res.status(201).json({
+    const payload = {
       message: 'Lead created successfully.',
       lead
+    };
+
+    return res.status(201).json({
+      success: true,
+      data: payload,
+      ...payload
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Internal server error.' });
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Internal server error.',
+      errorCode: 'INTERNAL_ERROR',
+      error: err.message || 'Internal server error.'
+    });
   }
 };
 
@@ -106,18 +168,41 @@ export const updateLead = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.id;
     const userName = req.user?.name;
+    const userRole = req.user?.role;
     const { id } = req.params;
+    const leadId = parseInt(id, 10);
+    if (isNaN(leadId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid lead ID format. Must be an integer.',
+        errorCode: 'VALIDATION_ERROR',
+        error: 'Invalid lead ID format. Must be an integer.'
+      });
+    }
 
     const existingResult = await query(
       'SELECT * FROM leads WHERE id = $1 AND is_deleted = false',
-      [id]
+      [leadId]
     );
 
     if (existingResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Lead not found.' });
+      return res.status(404).json({
+        success: false,
+        message: 'Lead not found.',
+        errorCode: 'LEAD_NOT_FOUND',
+        error: 'Lead not found.'
+      });
     }
 
     const lead = existingResult.rows[0];
+    if (userRole === 'Telecaller' && lead.assigned_to !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. You can only update leads assigned to you.',
+        errorCode: 'ACCESS_DENIED',
+        error: 'Access denied. You can only update leads assigned to you.'
+      });
+    }
 
     const { patient_name, contact_number, status, notes, callback_time, assigned_to } = req.body;
 
@@ -132,7 +217,7 @@ export const updateLead = async (req: AuthenticatedRequest, res: Response) => {
       `UPDATE leads SET
         patient_name = $1, contact_number = $2, status = $3, notes = $4, callback_time = $5, assigned_to = $6
        WHERE id = $7 RETURNING *`,
-      [newPatientName, newContactNumber, newStatus, newNotes, newCallbackTime, newAssignedTo, id]
+      [newPatientName, newContactNumber, newStatus, newNotes, newCallbackTime, newAssignedTo, leadId]
     );
 
     const updatedLead = result.rows[0];
@@ -154,12 +239,23 @@ export const updateLead = async (req: AuthenticatedRequest, res: Response) => {
       );
     }
 
-    return res.status(200).json({
+    const payload = {
       message: 'Lead updated successfully.',
       lead: updatedLead
+    };
+
+    return res.status(200).json({
+      success: true,
+      data: payload,
+      ...payload
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Internal server error.' });
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Internal server error.',
+      errorCode: 'INTERNAL_ERROR',
+      error: err.message || 'Internal server error.'
+    });
   }
 };
 
@@ -168,33 +264,55 @@ export const deleteLead = async (req: AuthenticatedRequest, res: Response) => {
     const userId = req.user?.id;
     const userName = req.user?.name;
     const { id } = req.params;
+    const leadId = parseInt(id, 10);
+    if (isNaN(leadId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid lead ID format. Must be an integer.',
+        errorCode: 'VALIDATION_ERROR',
+        error: 'Invalid lead ID format. Must be an integer.'
+      });
+    }
 
     const checkResult = await query(
       'SELECT id, patient_name FROM leads WHERE id = $1 AND is_deleted = false',
-      [id]
+      [leadId]
     );
 
     if (checkResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Lead not found.' });
+      return res.status(404).json({
+        success: false,
+        message: 'Lead not found.',
+        errorCode: 'LEAD_NOT_FOUND',
+        error: 'Lead not found.'
+      });
     }
 
     const patientName = checkResult.rows[0].patient_name;
 
     await query(
       `UPDATE leads SET is_deleted = true, deleted_at = $1 WHERE id = $2`,
-      [new Date().toISOString(), id]
+      [new Date().toISOString(), leadId]
     );
 
     await logAudit(
       userId || null,
       'DELETE_LEAD',
       'leads',
-      parseInt(id, 10),
+      leadId,
       `Lead for ${patientName} soft deleted by ${userName}`
     );
 
-    return res.status(200).json({ message: 'Lead deleted successfully.' });
+    return res.status(200).json({
+      success: true,
+      message: 'Lead deleted successfully.'
+    });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Internal server error.' });
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Internal server error.',
+      errorCode: 'INTERNAL_ERROR',
+      error: err.message || 'Internal server error.'
+    });
   }
 };

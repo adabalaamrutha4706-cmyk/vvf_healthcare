@@ -20,6 +20,8 @@ export default function TelecallerPage() {
   // Search & Filter
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [selectedTelecallerFilter, setSelectedTelecallerFilter] = useState<number | null>(null);
+  const [dateFilter, setDateFilter] = useState<string>('All');
   
   // States
   const [loading, setLoading] = useState(true);
@@ -37,9 +39,33 @@ export default function TelecallerPage() {
   const [callbackTime, setCallbackTime] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
 
+  // Sync with URL query parameter on mount
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const paramTcId = searchParams.get('telecallerId');
+      if (paramTcId) {
+        const parsed = parseInt(paramTcId, 10);
+        if (!isNaN(parsed)) {
+          setSelectedTelecallerFilter(parsed);
+        }
+      }
+    }
     fetchLeads();
   }, []);
+
+  const handleSelectTelecaller = (id: number | null) => {
+    setSelectedTelecallerFilter(id);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (id) {
+        url.searchParams.set('telecallerId', id.toString());
+      } else {
+        url.searchParams.delete('telecallerId');
+      }
+      window.history.pushState({}, '', url.toString());
+    }
+  };
 
   const fetchLeads = async () => {
     setLoading(true);
@@ -47,9 +73,9 @@ export default function TelecallerPage() {
       const res = await api.leads.getAll();
       setLeads(res.leads || []);
 
-      // Also get telecallers list from backend user listing for assignment options
-      const userRes = await api.users.getAll();
-      const telecallers = (userRes.users || []).filter((u: any) => ['Telecaller', 'Admin'].includes(u.role));
+      // Get telecallers list from backend dedicated endpoint
+      const userRes = await api.users.getTelecallers();
+      const telecallers = userRes.telecallers || [];
       setStaff(telecallers);
     } catch (e: any) {
       setError(e.message || 'Failed to fetch customer/leads records.');
@@ -135,8 +161,36 @@ export default function TelecallerPage() {
       l.contact_number.includes(search) ||
       (l.notes && l.notes.toLowerCase().includes(search.toLowerCase()));
 
-    if (statusFilter === 'All') return matchesSearch;
-    return matchesSearch && l.status === statusFilter;
+    const matchesStatus = statusFilter === 'All' || l.status === statusFilter;
+
+    // Telecaller filter
+    const matchesTelecaller = !selectedTelecallerFilter || l.assigned_to === selectedTelecallerFilter;
+
+    // Date filter
+    let matchesDate = true;
+    if (dateFilter !== 'All') {
+      if (l.callback_time) {
+        const cbDate = new Date(l.callback_time);
+        const today = new Date();
+        
+        const isSameDay = cbDate.getDate() === today.getDate() &&
+          cbDate.getMonth() === today.getMonth() &&
+          cbDate.getFullYear() === today.getFullYear();
+
+        if (dateFilter === 'Today') {
+          matchesDate = isSameDay;
+        } else if (dateFilter === 'Overdue') {
+          const isPast = cbDate < today && !isSameDay;
+          matchesDate = isPast && l.status !== 'Completed' && l.status !== 'Confirmed';
+        } else if (dateFilter === 'Upcoming') {
+          matchesDate = cbDate > today && !isSameDay;
+        }
+      } else {
+        matchesDate = false;
+      }
+    }
+
+    return matchesSearch && matchesStatus && matchesTelecaller && matchesDate;
   });
 
   return (
@@ -146,11 +200,11 @@ export default function TelecallerPage() {
         {/* Header Block */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
+            <h1 className="text-lg sm:text-2xl font-bold text-primary-text flex items-center gap-2">
               Telecalling & Patient Outreach
-              <PhoneCall className="h-5 w-5 text-cyan-400" />
+              <PhoneCall className="h-5 w-5 text-primary-green" />
             </h1>
-            <p className="text-sm text-slate-400 mt-0.5">
+            <p className="text-sm text-secondary-text mt-0.5">
               Outbound patient lead checklists, appointment callback schedules, and logs.
             </p>
           </div>
@@ -158,7 +212,7 @@ export default function TelecallerPage() {
           <button
             id="btn-new-lead"
             onClick={handleOpenCreate}
-            className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-white bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 rounded-xl cursor-pointer transition-all shadow-md shadow-cyan-950/20"
+            className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-white bg-primary-green hover:bg-primary-green-hover rounded-xl cursor-pointer transition-all shadow-md shadow-emerald-950/20"
           >
             <Plus className="h-4.5 w-4.5" />
             Add Patient Lead
@@ -167,148 +221,263 @@ export default function TelecallerPage() {
 
         {/* Global Feedback Panels */}
         {error && (
-          <div className="p-4 rounded-xl bg-red-950/40 border border-red-500/20 text-xs text-red-400 flex items-center gap-2">
+          <div className="p-4 rounded-xl bg-alert-bg border border-alert-border text-xs text-alert-text flex items-center gap-2">
             <ShieldAlert className="h-4.5 w-4.5" />
             {error}
           </div>
         )}
         {success && (
-          <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-500/20 text-xs text-emerald-400 flex items-center gap-2">
+          <div className="p-4 rounded-xl bg-very-light-green border border-light-green/40 text-xs text-primary-green flex items-center gap-2">
             <CheckCircle className="h-4.5 w-4.5" />
             {success}
           </div>
         )}
 
-        {/* Search Panel */}
-        <div className="flex flex-col md:flex-row gap-4 bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-3 h-4.5 w-4.5 text-slate-500" />
-            <input
-              id="lead-search"
-              type="text"
-              placeholder="Search leads by name, phone, or notes..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 rounded-xl py-2.5 pl-10 pr-4 text-xs text-slate-200 placeholder-slate-600 outline-none transition-all"
-            />
-          </div>
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 items-start">
+          {/* Sidebar / Left Column: Telecallers List */}
+          {user?.role !== 'Telecaller' && (
+            <div className="lg:col-span-1 space-y-4 min-w-0">
+              <div className="bg-white border border-border-gray p-3 rounded-xl shadow-sm">
+                <div className="flex items-center gap-2 mb-3 pb-2 border-b border-border-gray">
+                  <User className="h-4.5 w-4.5 text-primary-green" />
+                  <h2 className="text-sm font-bold text-primary-green">Telecallers Team</h2>
+                </div>
+                <div className="space-y-2 max-h-[300px] lg:max-h-[500px] overflow-y-auto pr-1">
+                  {/* All Telecallers option */}
+                  <button
+                    id="btn-telecaller-all"
+                    onClick={() => handleSelectTelecaller(null)}
+                    className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-all duration-200 border cursor-pointer ${
+                      !selectedTelecallerFilter
+                        ? 'bg-very-light-green/70 text-primary-green border-primary-green'
+                        : 'bg-white text-secondary-text border-border-gray hover:bg-secondary-bg hover:text-primary-green'
+                    }`}
+                  >
+                    <span>All Assignments</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      !selectedTelecallerFilter ? 'bg-primary-green text-white' : 'bg-secondary-bg text-secondary-text border border-border-gray'
+                    }`}>
+                      {leads.length}
+                    </span>
+                  </button>
 
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-400 font-medium">Outreach Status:</span>
-            <div className="flex flex-wrap gap-1">
-              {['All', 'Interested', 'Follow-up', 'Confirmed', 'Not Responding'].map((st) => (
-                <button
-                  key={st}
-                  id={`status-${st.toLowerCase().replace(/\s+/g, '-')}`}
-                  onClick={() => setStatusFilter(st)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
-                    statusFilter === st
-                      ? 'bg-cyan-950/60 text-cyan-300 border border-cyan-500/30'
-                      : 'bg-slate-950 text-slate-400 border border-slate-850 hover:bg-slate-850'
-                  }`}
-                >
-                  {st}
-                </button>
-              ))}
+                  {/* Telecallers list */}
+                  {staff.map((tc) => {
+                    const tcLeadsCount = leads.filter((l) => l.assigned_to === tc.id).length;
+                    const isSelected = selectedTelecallerFilter === tc.id;
+                    return (
+                      <button
+                        key={tc.id}
+                        id={`btn-telecaller-${tc.id}`}
+                        onClick={() => handleSelectTelecaller(tc.id)}
+                        className={`w-full text-left px-3 py-2.5 rounded-xl text-xs flex items-center justify-between transition-all duration-200 border cursor-pointer ${
+                          isSelected
+                            ? 'bg-very-light-green/70 text-primary-green border-primary-green shadow-sm'
+                            : 'bg-white text-secondary-text border-border-gray hover:bg-secondary-bg hover:text-primary-green'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className={`h-7 w-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+                            isSelected ? 'bg-primary-green text-white' : 'bg-very-light-green text-primary-green border border-light-green'
+                          }`}>
+                            {tc.name.charAt(0)}
+                          </div>
+                          <div className="text-left truncate">
+                            <p className="font-semibold truncate">{tc.name}</p>
+                            <p className="text-[9px] text-slate-400 truncate">{tc.phone || tc.email}</p>
+                          </div>
+                        </div>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                          isSelected ? 'bg-primary-green text-white' : 'bg-secondary-bg text-secondary-text border border-border-gray'
+                        }`}>
+                          {tcLeadsCount}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          )}
 
-        {/* Grid List */}
-        {loading ? (
-          <div className="flex h-48 items-center justify-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-cyan-500 border-t-transparent"></div>
-          </div>
-        ) : filteredLeads.length === 0 ? (
-          <div className="bg-slate-900/60 border border-slate-850 p-12 text-center rounded-2xl flex flex-col items-center justify-center">
-            <PhoneCall className="h-10 w-10 text-slate-600 mb-3" />
-            <p className="text-slate-400 text-sm font-medium">No patient outreach logs matched queries.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {filteredLeads.map((lead) => {
-              const callback = lead.callback_time ? new Date(lead.callback_time) : null;
-              
-              return (
-                <motion.div
-                  key={lead.id}
-                  id={`lead-card-${lead.id}`}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between hover:border-slate-700 transition-all duration-200"
-                >
-                  <div>
-                    <div className="flex justify-between items-start gap-2 mb-3">
-                      <h3 className="font-bold text-slate-200 text-sm truncate leading-tight">{lead.patient_name}</h3>
-                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold shrink-0 ${
-                        lead.status === 'Confirmed' ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/20' :
-                        lead.status === 'Follow-up' ? 'bg-amber-950 text-amber-400 border border-amber-500/20' :
-                        lead.status === 'Interested' ? 'bg-cyan-950 text-cyan-400 border border-cyan-500/20' :
-                        'bg-rose-950 text-rose-400 border border-rose-500/20'
-                      }`}>
-                        {lead.status}
-                      </span>
-                    </div>
+          {/* Main / Right Column: Leads List & Date Filters */}
+          <div className={`${user?.role === 'Telecaller' ? 'lg:col-span-4' : 'lg:col-span-3'} space-y-4 min-w-0`}>
+            {/* Search Panel */}
+            <div className="flex flex-col gap-3 bg-white border border-border-gray p-3 rounded-xl shadow-sm">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-3 h-4.5 w-4.5 text-secondary-text" />
+                <input
+                  id="lead-search"
+                  type="text"
+                  placeholder="Search leads by name, phone, or notes..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2.5 pl-10 pr-4 text-xs text-primary-text placeholder-slate-400 outline-none transition-all"
+                />
+              </div>
 
-                    <div className="space-y-2 bg-slate-950/60 border border-slate-850 p-3 rounded-xl mb-4 text-xs">
-                      <div className="flex items-center gap-2 text-slate-350 font-semibold">
-                        <Phone className="h-3.5 w-3.5 text-slate-500" />
-                        <span>{lead.contact_number}</span>
-                      </div>
-                      {callback && (
-                        <div className="flex items-center gap-2 text-amber-400 font-semibold">
-                          <Calendar className="h-3.5 w-3.5 text-amber-500" />
-                          <span>
-                            Callback: {callback.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} • {callback.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-secondary-text font-medium">Outreach Status:</span>
+                <div className="flex flex-wrap gap-1">
+                  {['All', 'Interested', 'Follow-up', 'Confirmed', 'Not Responding'].map((st) => (
+                    <button
+                      key={st}
+                      id={`status-${st.toLowerCase().replace(/\s+/g, '-')}`}
+                      onClick={() => setStatusFilter(st)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                        statusFilter === st
+                          ? 'bg-very-light-green/60 text-emerald-500 border border-emerald-500/30'
+                          : 'bg-white text-secondary-text border border-border-gray hover:bg-secondary-bg'
+                      }`}
+                    >
+                      {st}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Date Filters Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-white border border-border-gray p-3 rounded-xl shadow-sm">
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-secondary-text font-medium">Callback Period:</span>
+                <div className="flex flex-wrap gap-1">
+                  {[
+                    { name: 'All Days', value: 'All' },
+                    { name: 'Today', value: 'Today' },
+                    { name: 'Overdue', value: 'Overdue' },
+                    { name: 'Upcoming', value: 'Upcoming' }
+                  ].map((df) => (
+                    <button
+                      key={df.value}
+                      id={`date-filter-${df.value.toLowerCase()}`}
+                      onClick={() => setDateFilter(df.value)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
+                        dateFilter === df.value
+                          ? 'bg-very-light-green/60 text-emerald-500 border border-emerald-500/30'
+                          : 'bg-white text-secondary-text border border-border-gray hover:bg-secondary-bg'
+                      }`}
+                    >
+                      {df.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {selectedTelecallerFilter && (
+                <div className="text-xs text-secondary-text bg-secondary-bg px-3 py-1.5 rounded-lg border border-border-gray font-medium flex items-center gap-1.5 animate-fadeIn">
+                  <span>Showing:</span>
+                  <span className="text-primary-green font-semibold">
+                    {staff.find((tc) => tc.id === selectedTelecallerFilter)?.name || 'Telecaller'}
+                  </span>
+                  <button
+                    onClick={() => handleSelectTelecaller(null)}
+                    className="text-slate-400 hover:text-alert-text ml-1 cursor-pointer transition-colors"
+                    title="Clear telecaller filter"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Grid List */}
+            {loading ? (
+              <div className="flex h-48 items-center justify-center">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div>
+              </div>
+            ) : filteredLeads.length === 0 ? (
+              <div className="bg-white/60 border border-border-gray p-12 text-center rounded-2xl flex flex-col items-center justify-center">
+                <PhoneCall className="h-10 w-10 text-slate-600 mb-3" />
+                <p className="text-secondary-text text-sm font-medium">No patient outreach logs matched queries.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {filteredLeads.map((lead) => {
+                  const callback = lead.callback_time ? new Date(lead.callback_time) : null;
+                  
+                  return (
+                    <motion.div
+                      key={lead.id}
+                      id={`lead-card-${lead.id}`}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-white border border-border-gray rounded-xl sm:rounded-2xl p-4 sm:p-5 flex flex-col justify-between hover:border-light-green transition-all duration-200"
+                    >
+                      <div>
+                        <div className="flex justify-between items-start gap-2 mb-3">
+                          <h3 className="font-bold text-primary-text text-sm truncate leading-tight">{lead.patient_name}</h3>
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold shrink-0 ${
+                            lead.status === 'Confirmed' ? 'bg-very-light-green text-primary-green border border-light-green/40' :
+                            lead.status === 'Follow-up' ? 'bg-secondary-bg text-secondary-text border border-border-gray' :
+                            lead.status === 'Interested' ? 'bg-very-light-green text-primary-green border border-light-green/40' :
+                            'bg-alert-bg text-alert-text border border-alert-border'
+                          }`}>
+                            {lead.status}
                           </span>
                         </div>
-                      )}
-                      <div className="text-[10px] text-slate-500 border-t border-slate-850/80 pt-2 truncate">
-                        Outreach Agent: <span className="text-slate-400 font-semibold">{lead.assigned_name || 'Unassigned'}</span>
+
+                        <div className="space-y-2 bg-white/60 border border-border-gray p-3 rounded-xl mb-4 text-xs">
+                          <div className="flex items-center gap-2 text-secondary-text font-semibold">
+                            <Phone className="h-3.5 w-3.5 text-secondary-text" />
+                            <span>{lead.contact_number}</span>
+                          </div>
+                          {callback && (
+                            <div className="flex items-center gap-2 text-secondary-text font-semibold">
+                              <Calendar className="h-3.5 w-3.5 text-alert-text" />
+                              <span>
+                                Callback: {callback.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} • {callback.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                          )}
+                          <div className="text-[10px] text-secondary-text border-t border-border-gray pt-2 truncate">
+                            Assigned Telecaller: <span className="text-secondary-text font-semibold">{lead.assigned_name || 'Unassigned'}</span>
+                          </div>
+                        </div>
+
+                        {lead.notes && (
+                          <p className="text-[10px] text-secondary-text italic mb-4 bg-white/20 p-2.5 rounded-lg border border-border-gray leading-normal">
+                            "{lead.notes}"
+                          </p>
+                        )}
                       </div>
-                    </div>
 
-                    {lead.notes && (
-                      <p className="text-[10px] text-slate-450 italic mb-4 bg-slate-950/20 p-2.5 rounded-lg border border-slate-850/40 leading-normal">
-                        "{lead.notes}"
-                      </p>
-                    )}
-                  </div>
+                      <div className="flex justify-between items-center border-t border-border-gray pt-3.5">
+                        {/* Action buttons */}
+                        <a
+                          href={`tel:${lead.contact_number}`}
+                          className="flex items-center gap-1 text-[10px] font-bold text-primary-green hover:text-emerald-500 bg-very-light-green/30 border border-light-green px-2 py-1 rounded-md"
+                        >
+                          <PhoneCall className="h-3 w-3" />
+                          Place Call
+                        </a>
 
-                  <div className="flex justify-between items-center border-t border-slate-850 pt-3.5">
-                    {/* Action buttons */}
-                    <a
-                      href={`tel:${lead.contact_number}`}
-                      className="flex items-center gap-1 text-[10px] font-bold text-cyan-400 hover:text-cyan-300 bg-cyan-950/30 border border-cyan-850 px-2 py-1 rounded-md"
-                    >
-                      <PhoneCall className="h-3 w-3" />
-                      Place Call
-                    </a>
-
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        id={`btn-edit-lead-${lead.id}`}
-                        onClick={() => handleOpenEdit(lead)}
-                        className="p-1.5 text-slate-450 hover:text-cyan-400 hover:bg-slate-800/40 rounded-lg cursor-pointer transition-colors"
-                        title="Edit Outreach details"
-                      >
-                        <Edit3 className="h-4 w-4" />
-                      </button>
-                      <button
-                        id={`btn-delete-lead-${lead.id}`}
-                        onClick={() => handleDelete(lead.id)}
-                        className="p-1.5 text-slate-450 hover:text-rose-400 hover:bg-slate-800/40 rounded-lg cursor-pointer transition-colors"
-                        title="Delete Lead"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            id={`btn-edit-lead-${lead.id}`}
+                            onClick={() => handleOpenEdit(lead)}
+                            className="p-1.5 text-secondary-text hover:text-primary-green hover:bg-very-light-green rounded-lg cursor-pointer transition-colors"
+                            title="Edit Outreach details"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </button>
+                          <button
+                            id={`btn-delete-lead-${lead.id}`}
+                            onClick={() => handleDelete(lead.id)}
+                            className="p-1.5 text-secondary-text hover:text-alert-text hover:bg-very-light-green rounded-lg cursor-pointer transition-colors"
+                            title="Delete Lead"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
         {/* Modal: Create/Edit Form */}
         <AnimatePresence>
@@ -326,21 +495,21 @@ export default function TelecallerPage() {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col"
+                className="w-full max-w-md bg-white border border-border-gray rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col"
               >
-                <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
-                  <h3 className="font-bold text-sm text-slate-100 flex items-center gap-1.5">
-                    <Sparkles className="h-4.5 w-4.5 text-cyan-400 animate-pulse" />
+                <div className="px-6 py-4 border-b border-border-gray flex items-center justify-between">
+                  <h3 className="font-bold text-sm text-primary-text flex items-center gap-1.5">
+                    <Sparkles className="h-4.5 w-4.5 text-primary-green animate-pulse" />
                     {selectedLead ? 'Edit Lead Observations' : 'New Patient Referral'}
                   </h3>
-                  <button id="close-lead-modal" onClick={() => setIsFormOpen(false)} className="text-slate-400 hover:text-white cursor-pointer">
+                  <button id="close-lead-modal" onClick={() => setIsFormOpen(false)} className="text-secondary-text hover:text-primary-green cursor-pointer">
                     <X className="h-4.5 w-4.5" />
                   </button>
                 </div>
 
                 <form onSubmit={handleFormSubmit} className="p-6 space-y-4">
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Patient Name</label>
+                    <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Patient Name</label>
                     <input
                       id="form-lead-name"
                       type="text"
@@ -348,13 +517,13 @@ export default function TelecallerPage() {
                       value={patientName}
                       onChange={(e) => setPatientName(e.target.value)}
                       placeholder="Jane Austin"
-                      className="w-full bg-slate-950 border border-slate-850 focus:border-cyan-500 rounded-xl py-2 px-3 text-xs text-slate-200 outline-none"
+                      className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-primary-text outline-none"
                     />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Phone Number</label>
+                      <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Phone Number</label>
                       <input
                         id="form-lead-phone"
                         type="tel"
@@ -362,16 +531,16 @@ export default function TelecallerPage() {
                         value={contactNumber}
                         onChange={(e) => setContactNumber(e.target.value)}
                         placeholder="9988776655"
-                        className="w-full bg-slate-950 border border-slate-850 focus:border-cyan-500 rounded-xl py-2 px-3 text-xs text-slate-200 outline-none"
+                        className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-primary-text outline-none"
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Outreach Status</label>
+                      <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Outreach Status</label>
                       <select
                         id="form-lead-status"
                         value={status}
                         onChange={(e) => setStatus(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-850 focus:border-cyan-500 rounded-xl py-2 px-3 text-xs text-slate-200 outline-none"
+                        className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-primary-text outline-none"
                       >
                         <option value="Interested">Interested</option>
                         <option value="Follow-up">Callback Follow-up</option>
@@ -384,49 +553,56 @@ export default function TelecallerPage() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Callback Schedule</label>
+                      <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Callback Schedule</label>
                       <input
                         id="form-lead-callback"
                         type="datetime-local"
                         value={callbackTime}
                         onChange={(e) => setCallbackTime(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-850 focus:border-cyan-500 rounded-xl py-2 px-3 text-xs text-slate-200 outline-none"
+                        className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-primary-text outline-none"
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Assigned Agent</label>
+                      <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Assigned Telecaller</label>
                       <select
                         id="form-lead-assignee"
                         value={assignedTo}
+                        disabled={user?.role === 'Telecaller'}
                         onChange={(e) => setAssignedTo(e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-850 focus:border-cyan-500 rounded-xl py-2 px-3 text-xs text-slate-200 outline-none"
+                        className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-primary-text outline-none disabled:bg-slate-50 disabled:text-slate-500"
                       >
-                        <option value="">Choose Agent</option>
-                        {staff.map(s => (
-                          <option key={s.id} value={s.id}>{s.name} ({s.role})</option>
-                        ))}
+                        {user?.role === 'Telecaller' ? (
+                          <option value={user.id}>{user.name} ({user.role})</option>
+                        ) : (
+                          <>
+                            <option value="">Choose Telecaller</option>
+                            {staff.map(s => (
+                              <option key={s.id} value={s.id}>{s.name} ({s.role})</option>
+                            ))}
+                          </>
+                        )}
                       </select>
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Outbound Notes</label>
+                    <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Outbound Notes</label>
                     <textarea
                       id="form-lead-notes"
                       rows={3}
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
                       placeholder="Suffering from varicose veins, wants weekend consult..."
-                      className="w-full bg-slate-950 border border-slate-850 focus:border-cyan-500 rounded-xl p-3 text-xs text-slate-200 outline-none resize-none"
+                      className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl p-3 text-xs text-primary-text outline-none resize-none"
                     />
                   </div>
 
-                  <div className="pt-4 border-t border-slate-850 flex items-center justify-end gap-2.5">
+                  <div className="pt-4 border-t border-border-gray flex items-center justify-end gap-2.5">
                     <button
                       id="btn-cancel-lead"
                       type="button"
                       onClick={() => setIsFormOpen(false)}
-                      className="px-4 py-2 border border-slate-800 hover:bg-slate-850 text-xs text-slate-400 rounded-xl transition-all cursor-pointer font-semibold"
+                      className="px-4 py-2 border border-border-gray hover:bg-secondary-bg text-xs text-secondary-text rounded-xl transition-all cursor-pointer font-semibold"
                     >
                       Cancel
                     </button>
@@ -434,7 +610,7 @@ export default function TelecallerPage() {
                       id="btn-submit-lead"
                       type="submit"
                       disabled={submitLoading}
-                      className="px-5 py-2 text-xs font-semibold text-white bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 rounded-xl cursor-pointer transition-all flex items-center gap-1.5 shadow-md shadow-cyan-950/20"
+                      className="px-5 py-2 text-xs font-semibold text-white bg-primary-green hover:bg-primary-green-hover rounded-xl cursor-pointer transition-all flex items-center gap-1.5 shadow-md shadow-emerald-950/20"
                     >
                       {submitLoading ? 'Saving...' : 'Save Lead'}
                     </button>

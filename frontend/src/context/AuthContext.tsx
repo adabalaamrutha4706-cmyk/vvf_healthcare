@@ -8,7 +8,7 @@ export interface User {
   id: number;
   name: string;
   email: string;
-  role: 'Admin' | 'Chief Doctor' | 'Doctor' | 'Reception' | 'Telecaller' | 'Executive';
+  role: 'Admin' | 'Chief Doctor' | 'Doctor' | 'Reception' | 'Telecaller' | 'Executive' | 'Superadmin';
   phone?: string;
 }
 
@@ -17,8 +17,8 @@ interface AuthContextType {
   loading: boolean;
   isPunchedIn: boolean;
   activePunchRecord: any | null;
-  login: (credentials: { email: string; password: string }) => Promise<void>;
-  logout: () => Promise<void>;
+  login: (credentials: { email: string; password: string }, redirectPath?: string) => Promise<void>;
+  logout: (redirectPath?: string) => Promise<void>;
   checkPunchStatus: () => Promise<void>;
   triggerPunch: (action: 'in' | 'out', device_info?: string, gps_latitude?: number, gps_longitude?: number) => Promise<void>;
   updateUser: (updatedFields: Partial<User>) => void;
@@ -41,7 +41,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (token) {
           const res = await api.auth.getMe();
           setUser(res.user);
-          await checkPunchStatus();
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('vvf_role', res.user.role);
+          }
+          await checkPunchStatus(res.user);
         }
       } catch (err) {
         console.error('Failed to restore authentication session:', err);
@@ -54,9 +57,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initializeAuth();
   }, []);
 
-  const checkPunchStatus = async () => {
+  const checkPunchStatus = async (currentUser?: User | null) => {
     try {
-      const res = await api.auth.getAttendance();
+      const activeUser = currentUser || user;
+      const params = activeUser ? { targetUserId: activeUser.id } : undefined;
+      const res = await api.auth.getAttendance(params);
       const records = res.records || [];
       const active = records.find((r: any) => r.status === 'active' || r.punch_out === null || r.punch_out === undefined);
       if (active) {
@@ -71,14 +76,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const login = async (credentials: { email: string; password: string }) => {
+  const login = async (credentials: { email: string; password: string }, redirectPath?: string) => {
     setLoading(true);
     try {
       const res = await api.auth.login(credentials);
       setToken(res.token);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('vvf_role', res.user.role);
+      }
       setUser(res.user);
-      await checkPunchStatus();
-      router.push('/dashboard');
+      await checkPunchStatus(res.user);
+      
+      if (redirectPath) {
+        router.push(redirectPath);
+      } else if (res.user.role === 'Superadmin') {
+        router.push('/superadmin/dashboard');
+      } else {
+        const role = res.user.role.toLowerCase();
+        if (role === 'admin') router.push('/admin/dashboard');
+        else if (role === 'chief doctor') router.push('/chief-doctor/dashboard');
+        else if (role === 'doctor') router.push('/doctor/dashboard');
+        else if (role === 'executive') router.push('/executive/dashboard');
+        else if (role === 'reception') router.push('/reception/dashboard');
+        else if (role === 'telecaller') router.push('/telecaller/dashboard');
+        else router.push('/dashboard');
+      }
     } catch (err) {
       removeToken();
       setUser(null);
@@ -88,19 +110,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const logout = async () => {
+  const logout = async (redirectPath?: string) => {
     setLoading(true);
     try {
-      await api.auth.logout();
+      const token = typeof window !== 'undefined' ? localStorage.getItem('vvf_token') : null;
+      if (token) {
+        await api.auth.logout();
+      }
     } catch (err) {
-      console.error('Logout request failed, cleaning local storage directly.');
+      console.warn('Logout request failed, cleaning local storage directly.');
     } finally {
       removeToken();
       setUser(null);
       setIsPunchedIn(false);
       setActivePunchRecord(null);
       setLoading(false);
-      router.push('/login');
+      router.push(redirectPath || '/login');
     }
   };
 

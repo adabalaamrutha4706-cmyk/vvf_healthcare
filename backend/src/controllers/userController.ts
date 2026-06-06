@@ -3,21 +3,83 @@ import bcrypt from 'bcryptjs';
 import { query } from '../config/db';
 import { logAudit } from '../config/audit';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { validateEmployee } from '../utils/employeeValidator';
 
 const hashPassword = (pwd: string) => bcrypt.hashSync(pwd, 10);
 
 export const getUsers = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (req.user?.role !== 'Admin') {
-      return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+    const requesterRole = req.user?.role;
+    if (requesterRole !== 'Admin' && requesterRole !== 'Superadmin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Admin privileges required.',
+        errorCode: 'ACCESS_DENIED'
+      });
     }
 
-    const result = await query(
-      'SELECT id, name, email, role, phone, is_active, created_at FROM users WHERE is_deleted = false ORDER BY id ASC'
-    );
-    return res.status(200).json({ users: result.rows });
+    // 1. Fetch users (filter out Superadmin role for standard Admins to maintain concealment)
+    let usersQuery = 'SELECT id, name, email, role, phone, is_active, created_at FROM users WHERE is_deleted = false';
+    const queryParams: any[] = [];
+
+    if (requesterRole === 'Admin') {
+      usersQuery += " AND role != 'Superadmin'";
+    }
+
+    usersQuery += ' ORDER BY id ASC';
+    const usersResult = await query(usersQuery, queryParams);
+
+    // 2. Fetch all attendance records ordered by punch_in DESC
+    const attendanceResult = await query('SELECT * FROM attendance ORDER BY punch_in DESC');
+    
+    // Group by user_id to get the latest record for each user
+    const latestAttendanceMap = new Map<number, any>();
+    attendanceResult.rows.forEach((record: any) => {
+      if (!latestAttendanceMap.has(record.user_id)) {
+        latestAttendanceMap.set(record.user_id, record);
+      }
+    });
+
+    // 3. Map users to attach live status metrics
+    const enrichedUsers = usersResult.rows.map((u: any) => {
+      const latest = latestAttendanceMap.get(u.id);
+      
+      let currentSessionStatus = 'Inactive';
+      let lastLoginTime = null;
+      let lastLogoutTime = null;
+      let currentSessionDuration = 0;
+
+      if (latest) {
+        lastLoginTime = latest.punch_in;
+        lastLogoutTime = latest.punch_out;
+        
+        if (latest.status === 'active' || !latest.punch_out) {
+          currentSessionStatus = 'Active';
+          const diffMs = new Date().getTime() - new Date(latest.punch_in).getTime();
+          currentSessionDuration = Math.round(Math.max(0, diffMs / (1000 * 60)));
+        }
+      }
+
+      return {
+        ...u,
+        current_session_status: currentSessionStatus,
+        last_login_time: lastLoginTime,
+        last_logout_time: lastLogoutTime,
+        current_session_duration: currentSessionDuration
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: { users: enrichedUsers },
+      users: enrichedUsers
+    });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Internal server error.' });
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Internal server error.',
+      errorCode: 'INTERNAL_ERROR'
+    });
   }
 };
 
@@ -25,13 +87,63 @@ export const getDoctors = async (req: AuthenticatedRequest, res: Response) => {
   try {
     // Accessible by anyone authenticated (for scheduling dropdowns)
     const result = await query(
-      `SELECT id, name, email, phone FROM users 
+      `SELECT id, name, email, phone, role FROM users 
        WHERE role IN ('Doctor', 'Chief Doctor') AND is_active = true AND is_deleted = false 
        ORDER BY name ASC`
     );
-    return res.status(200).json({ doctors: result.rows });
+    return res.status(200).json({
+      success: true,
+      data: { doctors: result.rows },
+      doctors: result.rows
+    });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Internal server error.' });
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Internal server error.',
+      errorCode: 'INTERNAL_ERROR'
+    });
+  }
+};
+
+export const getExecutives = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const result = await query(
+      `SELECT id, name, email, phone, role FROM users 
+       WHERE role = 'Executive' AND is_active = true AND is_deleted = false 
+       ORDER BY name ASC`
+    );
+    return res.status(200).json({
+      success: true,
+      data: { executives: result.rows },
+      executives: result.rows
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Internal server error.',
+      errorCode: 'INTERNAL_ERROR'
+    });
+  }
+};
+
+export const getTelecallers = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const result = await query(
+      `SELECT id, name, email, phone, role FROM users 
+       WHERE role = 'Telecaller' AND is_active = true AND is_deleted = false 
+       ORDER BY name ASC`
+    );
+    return res.status(200).json({
+      success: true,
+      data: { telecallers: result.rows },
+      telecallers: result.rows
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Internal server error.',
+      errorCode: 'INTERNAL_ERROR'
+    });
   }
 };
 
@@ -39,15 +151,43 @@ export const createUser = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const adminId = req.user?.id;
     const adminName = req.user?.name;
+    const requesterRole = req.user?.role;
 
-    if (req.user?.role !== 'Admin') {
-      return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+    if (requesterRole !== 'Admin' && requesterRole !== 'Superadmin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Admin privileges required.',
+        errorCode: 'ACCESS_DENIED'
+      });
     }
 
     const { name, email, password, role, phone } = req.body;
 
     if (!name || !email || !password || !role) {
-      return res.status(400).json({ error: 'Required fields (name, email, password, role) are missing.' });
+      return res.status(400).json({
+        success: false,
+        message: 'Required fields (name, email, password, role) are missing.',
+        errorCode: 'VALIDATION_ERROR'
+      });
+    }
+
+    const validation = validateEmployee({ name, phone });
+    if (!validation.isValid) {
+      return res.status(400).json({
+        success: false,
+        message: Object.values(validation.errors)[0],
+        errors: validation.errors,
+        errorCode: 'VALIDATION_ERROR'
+      });
+    }
+
+    // Role Escalation Prevention: standard Admins cannot assign the Superadmin role
+    if (role === 'Superadmin' && requesterRole !== 'Superadmin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized. Only Superadmins can assign the Superadmin role.',
+        errorCode: 'ROLE_ESCALATION_BLOCKED'
+      });
     }
 
     // Check if email already exists
@@ -57,7 +197,11 @@ export const createUser = async (req: AuthenticatedRequest, res: Response) => {
     );
 
     if (checkEmail.rows.length > 0) {
-      return res.status(400).json({ error: 'Email is already registered.' });
+      return res.status(400).json({
+        success: false,
+        message: 'Email is already registered.',
+        errorCode: 'EMAIL_ALREADY_EXISTS'
+      });
     }
 
     const pwdHash = hashPassword(password);
@@ -79,11 +223,15 @@ export const createUser = async (req: AuthenticatedRequest, res: Response) => {
     );
 
     return res.status(201).json({
-      message: 'User created successfully.',
-      user: newUser
+      success: true,
+      data: { user: newUser }
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Internal server error.' });
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Internal server error.',
+      errorCode: 'INTERNAL_ERROR'
+    });
   }
 };
 
@@ -91,9 +239,14 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const adminId = req.user?.id;
     const adminName = req.user?.name;
+    const requesterRole = req.user?.role;
 
-    if (req.user?.role !== 'Admin') {
-      return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+    if (requesterRole !== 'Admin' && requesterRole !== 'Superadmin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Admin privileges required.',
+        errorCode: 'ACCESS_DENIED'
+      });
     }
 
     const { id } = req.params;
@@ -105,16 +258,48 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response) => {
     );
 
     if (existingResult.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found.' });
+      return res.status(404).json({
+        success: false,
+        message: 'User not found.',
+        errorCode: 'USER_NOT_FOUND'
+      });
     }
 
     const user = existingResult.rows[0];
+
+    // Superadmin Concealment: Admins cannot access or update Superadmins (throw 404)
+    if (user.role === 'Superadmin' && requesterRole !== 'Superadmin') {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found.',
+        errorCode: 'USER_NOT_FOUND'
+      });
+    }
+
+    // Role Escalation Prevention: standard Admins cannot elevate a user to Superadmin
+    if (role === 'Superadmin' && user.role !== 'Superadmin' && requesterRole !== 'Superadmin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized. Only Superadmins can assign the Superadmin role.',
+        errorCode: 'ROLE_ESCALATION_BLOCKED'
+      });
+    }
 
     const newName = name !== undefined ? name : user.name;
     const newEmail = email !== undefined ? email : user.email;
     const newRole = role !== undefined ? role : user.role;
     const newPhone = phone !== undefined ? phone : user.phone;
     const newActive = is_active !== undefined ? is_active : user.is_active;
+
+    const validation = validateEmployee({ name: newName, phone: newPhone });
+    if (!validation.isValid) {
+      return res.status(400).json({
+        success: false,
+        message: Object.values(validation.errors)[0],
+        errors: validation.errors,
+        errorCode: 'VALIDATION_ERROR'
+      });
+    }
 
     let updateQuery = '';
     let params: any[] = [];
@@ -149,11 +334,15 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response) => {
     );
 
     return res.status(200).json({
-      message: 'User updated successfully.',
-      user: updatedUser
+      success: true,
+      data: { user: updatedUser }
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Internal server error.' });
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Internal server error.',
+      errorCode: 'INTERNAL_ERROR'
+    });
   }
 };
 
@@ -161,27 +350,49 @@ export const deleteUser = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const adminId = req.user?.id;
     const adminName = req.user?.name;
+    const requesterRole = req.user?.role;
 
-    if (req.user?.role !== 'Admin') {
-      return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+    if (requesterRole !== 'Admin' && requesterRole !== 'Superadmin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Admin privileges required.',
+        errorCode: 'ACCESS_DENIED'
+      });
     }
 
     const { id } = req.params;
 
     if (parseInt(id, 10) === adminId) {
-      return res.status(400).json({ error: 'You cannot delete your own admin account.' });
+      return res.status(400).json({
+        success: false,
+        message: 'You cannot delete your own admin account.',
+        errorCode: 'SELF_DELETION_BLOCKED'
+      });
     }
 
     const checkResult = await query(
-      'SELECT id, name FROM users WHERE id = $1 AND is_deleted = false',
+      'SELECT id, name, role FROM users WHERE id = $1 AND is_deleted = false',
       [id]
     );
 
     if (checkResult.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found.' });
+      return res.status(404).json({
+        success: false,
+        message: 'User not found.',
+        errorCode: 'USER_NOT_FOUND'
+      });
     }
 
-    const userName = checkResult.rows[0].name;
+    const user = checkResult.rows[0];
+
+    // Superadmin Concealment: Admins cannot delete Superadmins (throw 404)
+    if (user.role === 'Superadmin' && requesterRole !== 'Superadmin') {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found.',
+        errorCode: 'USER_NOT_FOUND'
+      });
+    }
 
     await query(
       `UPDATE users SET is_deleted = true, is_active = false, deleted_at = $1 WHERE id = $2`,
@@ -193,11 +404,92 @@ export const deleteUser = async (req: AuthenticatedRequest, res: Response) => {
       'DELETE_USER',
       'users',
       parseInt(id, 10),
-      `User '${userName}' soft deleted by Admin ${adminName}`
+      `User '${user.name}' soft deleted by Admin ${adminName}`
     );
 
-    return res.status(200).json({ message: 'User deleted successfully.' });
+    return res.status(200).json({
+      success: true,
+      message: 'User deleted successfully.'
+    });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message || 'Internal server error.' });
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Internal server error.',
+      errorCode: 'INTERNAL_ERROR'
+    });
+  }
+};
+
+// Recovery / Restore soft-deleted users (Admin & Superadmin only)
+export const restoreUser = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const adminId = req.user?.id;
+    const adminName = req.user?.name;
+    const requesterRole = req.user?.role;
+    const { id } = req.params;
+
+    if (requesterRole !== 'Admin' && requesterRole !== 'Superadmin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Admin privileges required.',
+        errorCode: 'ACCESS_DENIED'
+      });
+    }
+
+    const checkResult = await query(
+      'SELECT id, name, role, is_deleted FROM users WHERE id = $1',
+      [id]
+    );
+
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found.',
+        errorCode: 'USER_NOT_FOUND'
+      });
+    }
+
+    const user = checkResult.rows[0];
+
+    // Superadmin Concealment
+    if (user.role === 'Superadmin' && requesterRole !== 'Superadmin') {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found.',
+        errorCode: 'USER_NOT_FOUND'
+      });
+    }
+
+    if (!user.is_deleted) {
+      return res.status(400).json({
+        success: false,
+        message: 'User is already active.',
+        errorCode: 'ALREADY_ACTIVE'
+      });
+    }
+
+    await query(
+      'UPDATE users SET is_deleted = false, is_active = true, deleted_at = NULL WHERE id = $1',
+      [id]
+    );
+
+    await logAudit(
+      adminId || null,
+      'RESTORE_USER',
+      'users',
+      parseInt(id, 10),
+      `User '${user.name}' restored by Admin ${adminName}`
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'User restored successfully.'
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Internal server error.',
+      errorCode: 'INTERNAL_ERROR'
+    });
   }
 };

@@ -11,7 +11,11 @@ const dbUrl = process.env.DATABASE_URL;
 
 let pool: Pool | null = null;
 if (!useLocalDb && dbUrl) {
-  pool = new Pool({ connectionString: dbUrl });
+  const isSupabase = dbUrl.includes('supabase.co') || dbUrl.includes('supabase.com') || dbUrl.includes('supabase.net') || dbUrl.includes('pooler.supabase.com');
+  pool = new Pool({
+    connectionString: dbUrl,
+    ssl: isSupabase ? { rejectUnauthorized: false } : undefined
+  });
 }
 const localDbPath = path.join(__dirname, '../../data/local_db.json');
 
@@ -32,7 +36,8 @@ const initialData: Record<string, any[]> = {
   visits: [],
   visit_photos: [],
   notifications: [],
-  audit_logs: []
+  audit_logs: [],
+  appointment_edit_history: []
 };
 
 
@@ -320,3 +325,29 @@ export const query = async <T extends QueryResultRow = any>(sql: string, params?
     return localDb.query(sql, params);
   }
 };
+
+export const withTransaction = async <T>(callback: (client: any) => Promise<T>): Promise<T> => {
+  if (pool) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await callback(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  } else {
+    // Fallback to local DB (runs synchronously in JS single thread anyway)
+    const mockClient = {
+      query: async (sql: string, params?: any[]) => {
+        return localDb.query(sql, params);
+      }
+    };
+    return await callback(mockClient);
+  }
+};
+

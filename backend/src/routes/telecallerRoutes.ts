@@ -1,19 +1,16 @@
 import { Router } from 'express';
-import {
-  getLeads,
-  getLeadById,
-  createLead,
-  updateLead,
-  deleteLead
-} from '../controllers/telecallerController';
-import { requireAuth, requireRole } from '../middleware/auth';
+import leadRoutes from './leadRoutes';
+import dashboardRoutes from './dashboardRoutes';
+import visitRoutes from './visitRoutes';
+import userRoutes from './userRoutes';
+import hospitalRoutes from './hospitalRoutes';
 
 const router = Router();
 
-router.get('/', requireAuth, requireRole(['Admin', 'Telecaller']), getLeads);
-router.get('/:id', requireAuth, requireRole(['Admin', 'Telecaller']), getLeadById);
-router.post('/', requireAuth, requireRole(['Admin', 'Telecaller']), createLead);
-router.put('/:id', requireAuth, requireRole(['Admin', 'Telecaller']), updateLead);
-router.delete('/:id', requireAuth, requireRole(['Admin']), deleteLead);
+router.use('/leads', leadRoutes);
+router.use('/dashboard', dashboardRoutes);
+router.use('/visits', visitRoutes);
+router.use('/users', userRoutes);
+router.use('/hospitals', hospitalRoutes);
 
 export default router;

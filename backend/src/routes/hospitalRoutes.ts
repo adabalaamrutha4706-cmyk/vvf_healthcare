@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getHospitals,
   getHospitalById,
+  geocodeHospital,
   createHospital,
   updateHospital,
   deleteHospital
@@ -11,6 +12,7 @@ import { requireAuth, requireRole } from '../middleware/auth';
 const router = Router();
 
 router.get('/', requireAuth, getHospitals);
+router.get('/geocode-address', requireAuth, geocodeHospital);
 router.get('/:id', requireAuth, getHospitalById);
 router.post('/', requireAuth, requireRole(['Admin']), createHospital);
 router.put('/:id', requireAuth, requireRole(['Admin']), updateHospital);

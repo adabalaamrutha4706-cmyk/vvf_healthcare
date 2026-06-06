@@ -36,11 +36,54 @@ CREATE TABLE IF NOT EXISTS hospitals (
     state VARCHAR(255) NOT NULL,
     contact_person VARCHAR(255),
     phone VARCHAR(100),
-    status VARCHAR(100) DEFAULT 'Active',
+    status VARCHAR(100) DEFAULT 'ACTIVE',
+    hospital_uid VARCHAR(50) UNIQUE,
+    geo_verification_status VARCHAR(100) DEFAULT 'MANUAL_REVIEW_REQUIRED',
     is_deleted BOOLEAN DEFAULT FALSE,
     deleted_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    latitude DOUBLE PRECISION,
+    longitude DOUBLE PRECISION,
+    
+    -- Core Location Fields
+    address TEXT,
+    landmark VARCHAR(255),
+    pincode VARCHAR(20),
+    google_maps_link VARCHAR(500),
+    allowed_radius INTEGER DEFAULT 200,
+
+    -- Hospital Metadata
+    hospital_type VARCHAR(100) DEFAULT 'Clinic',
+    branch_code VARCHAR(50),
+    visiting_hours VARCHAR(255),
+    territory_zone VARCHAR(100),
+
+    -- Contact Information
+    reception_phone VARCHAR(100),
+    alternate_phone VARCHAR(100),
+    email VARCHAR(255),
+    hospital_admin_name VARCHAR(255),
+    department VARCHAR(100),
+
+    -- Executive Assignment
+    assigned_executives TEXT,
+    visit_frequency VARCHAR(100) DEFAULT 'Weekly',
+    last_visit_date TIMESTAMP WITH TIME ZONE,
+    total_visits INTEGER DEFAULT 0,
+
+    -- Geo-Verification Settings
+    require_gps_validation BOOLEAN DEFAULT TRUE,
+    require_live_photo BOOLEAN DEFAULT FALSE,
+    require_checkout BOOLEAN DEFAULT TRUE,
+    allow_remote_completion BOOLEAN DEFAULT TRUE,
+    geofencing_enabled BOOLEAN DEFAULT TRUE,
+
+    -- Status & Audit Fields
+    temporarily_closed BOOLEAN DEFAULT FALSE,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    legacy_hospital_id VARCHAR(100)
 );
 
 -- 3. Attendance Table
@@ -123,7 +166,41 @@ CREATE TABLE IF NOT EXISTS visits (
     is_deleted BOOLEAN DEFAULT FALSE,
     deleted_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Verification metrics
+    checkin_latitude DOUBLE PRECISION,
+    checkin_longitude DOUBLE PRECISION,
+    geo_verification_status VARCHAR(100),
+    checkin_time TIMESTAMP WITH TIME ZONE,
+    checkout_time TIMESTAMP WITH TIME ZONE,
+    visit_status VARCHAR(100),
+    distance_from_hospital_meters DOUBLE PRECISION,
+    device_info TEXT,
+    is_mock_location BOOLEAN DEFAULT FALSE,
+    checkout_latitude DOUBLE PRECISION,
+    checkout_longitude DOUBLE PRECISION,
+    checkout_accuracy DOUBLE PRECISION,
+    checkin_accuracy DOUBLE PRECISION,
+    
+    -- Completion & workflow enhancements
+    expires_at TIMESTAMP WITH TIME ZONE,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    evidence_uploaded BOOLEAN DEFAULT FALSE,
+    summary_submitted BOOLEAN DEFAULT FALSE,
+    observations_submitted BOOLEAN DEFAULT FALSE,
+    completion_progress INTEGER DEFAULT 0,
+    photo_uploaded_at TIMESTAMP WITH TIME ZONE,
+    summary_submitted_at TIMESTAMP WITH TIME ZONE,
+    observations_submitted_at TIMESTAMP WITH TIME ZONE,
+    expired_at TIMESTAMP WITH TIME ZONE,
+    reopened_at TIMESTAMP WITH TIME ZONE,
+    reopened_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    reminder_6h_sent BOOLEAN DEFAULT FALSE,
+    reminder_2h_sent BOOLEAN DEFAULT FALSE,
+    reminder_30m_sent BOOLEAN DEFAULT FALSE,
+    checkin_hospital_lat DOUBLE PRECISION,
+    checkin_hospital_lng DOUBLE PRECISION
 );
 
 -- 8. Visit Photos Table
@@ -173,3 +250,19 @@ CREATE INDEX IF NOT EXISTS idx_visits_hospital ON visits(hospital_id);
 CREATE INDEX IF NOT EXISTS idx_visit_photos_visit ON visit_photos(visit_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id);
+
+-- 11. Appointment Edit History Table
+CREATE TABLE IF NOT EXISTS appointment_edit_history (
+    id SERIAL PRIMARY KEY,
+    appointment_id INTEGER NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
+    edited_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    edited_by_name VARCHAR(255) NOT NULL,
+    edited_by_designation VARCHAR(100),
+    edited_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    old_values JSONB NOT NULL,
+    new_values JSONB NOT NULL,
+    change_summary TEXT NOT NULL
+);
+
+-- Index for history lookups
+CREATE INDEX IF NOT EXISTS idx_appointment_edit_history_appointment ON appointment_edit_history(appointment_id);
