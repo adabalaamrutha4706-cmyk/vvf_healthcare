@@ -110,11 +110,23 @@ async function runTests() {
     adminToken = adminLogin.body.token;
     console.log('[PASS] Admin login verified.');
 
-    // 3. Test Geo-Verification Failure (Checking in at Visakhapatnam Apollo from Hyderabad)
+    // Cleanup active visits first to ensure clean test environment
+    console.log('\nCleaning up any active visits for Rohan Verma...');
+    const visitsRes = await request('GET', '/api/visits', null, execToken);
+    const activeVisits = (visitsRes.body.data?.visits || []).filter(v => 
+      ['Checked In', 'Partially Completed', 'Pending Evidence', 'In Progress'].includes(v.status)
+    );
+    for (const v of activeVisits) {
+      console.log(`Cancelling active visit #${v.id}...`);
+      await request('DELETE', `/api/visits/${v.id}`, null, execToken);
+    }
+    console.log('Cleanup complete.');
+
+    // 3. Test Geo-Verification Failure (Checking in at Metro General Hospital from Hyderabad)
     console.log('\nStep 3: Checking in at far hospital (Location Mismatch)...');
     try {
       const multipart = createMultipartData('photo', 'checkin.jpg', dummyImageBuffer, {
-        hospital_id: '4', // Visakhapatnam Apollo Wing
+        hospital_id: '2', // Metro General Hospital (Secunderabad)
         gps_lat: '17.385044', // Hyderabad coordinates
         gps_lng: '78.486671',
         gps_accuracy: '10',
@@ -130,13 +142,13 @@ async function runTests() {
     }
 
     // 4. Test GPS Accuracy Failure
-    console.log('\nStep 4: Checking in with low GPS accuracy (>100 meters)...');
+    console.log('\nStep 4: Checking in with low GPS accuracy (>3000 meters)...');
     try {
       const multipart = createMultipartData('photo', 'checkin.jpg', dummyImageBuffer, {
         hospital_id: '1', // City Heart
         gps_lat: '17.385044', 
         gps_lng: '78.486671',
-        gps_accuracy: '150', // Low accuracy
+        gps_accuracy: '3500', // Low accuracy
         is_mock_location: 'false',
         city: 'Hyderabad',
         state: 'Telangana',
@@ -185,56 +197,36 @@ async function runTests() {
     console.log(`[PASS] Stored verification status: ${startRes.body.data.visit.geo_verification_status}`);
     console.log(`[PASS] Stored distance: ${Math.round(startRes.body.data.visit.distance_from_hospital_meters)} meters`);
 
-    // 7. Check Out Pre-requisite rules (Min duration & Evidence upload check)
-    console.log('\nStep 7: Attempting checkout immediately (expecting failures)...');
+    // 7. Test Duplicate Check-In prevention
+    console.log('\nStep 7: Testing prevention of duplicate active check-ins of the same type...');
     try {
-      await request('POST', `/api/visits/${visitId}/end`, {
-        summary: 'Early visit test'
-      }, execToken);
-      console.error('[FAIL] Checkout should have been blocked because no photo was uploaded!');
-    } catch (err) {
-      console.log(`[PASS] Checkout blocked successfully. Message: "${err.error}"`);
-    }
-
-    // 8. Upload Photo Evidence
-    console.log('\nStep 8: Uploading evidence audit photo...');
-    const multipartPhoto = createMultipartData('photo', 'test.jpg', dummyImageBuffer, {
-      gps_lat: '17.385044',
-      gps_lng: '78.486671',
-      city: 'Hyderabad',
-      state: 'Telangana',
-      captured_at: new Date().toISOString()
-    });
-
-    const photoRes = await request('POST', `/api/visits/${visitId}/photos`, null, execToken, true, multipartPhoto);
-    console.log('[PASS] Photo uploaded successfully.');
-    console.log(`[PASS] Saved photo url: ${photoRes.body.data.photo.photo_url}`);
-    console.log(`[PASS] Saved photo geotag: Lat ${photoRes.body.data.photo.captured_latitude}, Lng ${photoRes.body.data.photo.captured_longitude}, By user ID ${photoRes.body.data.photo.captured_by}`);
-
-    // Verify visit status changed to 'Evidence Uploaded'
-    const statusCheck = await request('GET', `/api/visits/${visitId}`, null, execToken);
-    console.log(`[PASS] Visit status successfully transitioned to: ${statusCheck.body.data.visit.status}`);
-
-    // 9. Finalizing checkout with Photo & coordinates
-    console.log('\nStep 9: Finalizing checkout...');
-    try {
-      const endMultipart = createMultipartData('photo', 'checkout.jpg', dummyImageBuffer, {
-        summary: 'Checked hospital laser calibration. Cleaned stock shelves.',
-        notes: 'Met manager Dr. Rao. Confirmed receipt of spare lens.',
-        checkout_latitude: '17.385044',
-        checkout_longitude: '78.486671',
-        checkout_accuracy: '10',
+      const dupMultipart = createMultipartData('photo', 'checkin_dup.jpg', dummyImageBuffer, {
+        hospital_id: '1',
+        gps_lat: '17.385044',
+        gps_lng: '78.486671',
+        gps_accuracy: '10',
+        is_mock_location: 'false',
+        city: 'Hyderabad',
+        state: 'Telangana',
         captured_at: new Date().toISOString()
       });
-      await request('POST', `/api/visits/${visitId}/end`, null, execToken, true, endMultipart);
-      console.log('[PASS] Checkout completed successfully.');
+      await request('POST', '/api/visits/start', null, execToken, true, dupMultipart);
+      console.error('[FAIL] Duplicate check-in should have been blocked!');
     } catch (err) {
-      if (err.error && err.error.includes('spend at least 10 minutes')) {
-        console.log(`[PASS] Checkout duration block works as expected! Blocked by duration rule: "${err.error}"`);
-      } else {
-        console.error('[FAIL] Checkout failed with unexpected error:', err.error);
-      }
+      console.log(`[PASS] Duplicate check-in blocked successfully. Message: "${err.error}"`);
     }
+
+    // 8. Test Successful Check-Out
+    console.log('\nStep 8: Testing check-out and visit completion...');
+    const checkoutRes = await request('POST', `/api/visits/${visitId}/complete`, {
+      checkout_latitude: '17.385044',
+      checkout_longitude: '78.486671',
+      checkout_accuracy: '10'
+    }, execToken);
+    
+    console.log('[PASS] Checkout completed successfully.');
+    console.log(`[PASS] Duration: ${checkoutRes.body.data.visit.duration_minutes} minutes.`);
+    console.log(`[PASS] Status: ${checkoutRes.body.data.visit.status}`);
 
     console.log('\nAll visit flow and security validations verified successfully!');
     process.exit(0);
@@ -245,3 +237,4 @@ async function runTests() {
 }
 
 runTests();
+

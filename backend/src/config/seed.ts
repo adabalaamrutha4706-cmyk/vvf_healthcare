@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { query, localDb } from './db';
+import { query, localDb, checkPostgresConnection } from './db';
 import * as fs from 'fs';
 import * as path from 'path';
 import { standardizeHospitalUIDs } from '../migrations/standardizeHospitals';
@@ -7,13 +7,66 @@ import { standardizeHospitalUIDs } from '../migrations/standardizeHospitals';
 const hashPassword = (pwd: string) => bcrypt.hashSync(pwd, 10);
 
 export const seedDatabase = async () => {
-  // Read and run schema.sql to ensure tables exist in Postgres
-  try {
-    const schemaPath = path.join(__dirname, '../../schema.sql');
-    if (fs.existsSync(schemaPath)) {
-      const schemaSql = fs.readFileSync(schemaPath, 'utf8');
-      await query(schemaSql);
-    }
+  const isPostgresConnected = await checkPostgresConnection();
+
+  if (isPostgresConnected) {
+    // Read and run schema.sql to ensure tables exist in Postgres
+    try {
+      const schemaPath = path.join(__dirname, '../../schema.sql');
+      if (fs.existsSync(schemaPath)) {
+        const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+        await query(schemaSql);
+      }
+
+      // Dynamic Alterations for Field Appointments
+      await query(`
+        CREATE TABLE IF NOT EXISTS field_appointments (
+          id SERIAL PRIMARY KEY,
+          patient_lead_id VARCHAR(100) UNIQUE NOT NULL,
+          full_name VARCHAR(255) NOT NULL,
+          age INTEGER NOT NULL,
+          gender VARCHAR(50) NOT NULL,
+          phone_number VARCHAR(100) NOT NULL,
+          appointment_type VARCHAR(255) NOT NULL,
+          medical_history TEXT,
+          executive_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          executive_name VARCHAR(255) NOT NULL,
+          status VARCHAR(100) DEFAULT 'New Lead',
+          assigned_telecaller_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          assigned_telecaller_name VARCHAR(255),
+          assigned_at TIMESTAMP WITH TIME ZONE,
+          last_followup_date TIMESTAMP WITH TIME ZONE,
+          next_followup_date TIMESTAMP WITH TIME ZONE,
+          telecaller_notes TEXT,
+          lead_status VARCHAR(100) DEFAULT 'New Lead',
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+      `).catch((err) => console.error('Error creating field_appointments table:', err));
+      await query(`CREATE INDEX IF NOT EXISTS idx_field_appointments_lead_id ON field_appointments(patient_lead_id);`).catch(() => {});
+      await query(`CREATE INDEX IF NOT EXISTS idx_field_appointments_executive ON field_appointments(executive_id);`).catch(() => {});
+      await query(`CREATE INDEX IF NOT EXISTS idx_field_appointments_telecaller ON field_appointments(assigned_telecaller_id);`).catch(() => {});
+
+      await query(`
+        CREATE TABLE IF NOT EXISTS auto_redistribution_log (
+          id SERIAL PRIMARY KEY,
+          redistribution_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          trigger_reason VARCHAR(255) NOT NULL,
+          leads_moved INTEGER NOT NULL,
+          active_telecallers INTEGER NOT NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+      `).catch((err) => console.error('Error creating auto_redistribution_log table:', err));
+
+      // Add columns if they do not exist
+      await query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_splits JSONB DEFAULT NULL;").catch(() => {});
+      await query("ALTER TABLE field_appointments ADD COLUMN IF NOT EXISTS assigned_telecaller_id INTEGER REFERENCES users(id) ON DELETE SET NULL;").catch(() => {});
+      await query("ALTER TABLE field_appointments ADD COLUMN IF NOT EXISTS assigned_telecaller_name VARCHAR(255);").catch(() => {});
+      await query("ALTER TABLE field_appointments ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMP WITH TIME ZONE;").catch(() => {});
+      await query("ALTER TABLE field_appointments ADD COLUMN IF NOT EXISTS last_followup_date TIMESTAMP WITH TIME ZONE;").catch(() => {});
+      await query("ALTER TABLE field_appointments ADD COLUMN IF NOT EXISTS next_followup_date TIMESTAMP WITH TIME ZONE;").catch(() => {});
+      await query("ALTER TABLE field_appointments ADD COLUMN IF NOT EXISTS telecaller_notes TEXT;").catch(() => {});
+      await query("ALTER TABLE field_appointments ADD COLUMN IF NOT EXISTS lead_status VARCHAR(100) DEFAULT 'New Lead';").catch(() => {});
 
     // Dynamic Alterations for Visit Verification Feature Columns
     await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION;").catch(() => {});
@@ -61,6 +114,8 @@ export const seedDatabase = async () => {
 
     await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS checkin_latitude DOUBLE PRECISION;").catch(() => {});
     await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS checkin_longitude DOUBLE PRECISION;").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS visit_type VARCHAR(100) DEFAULT 'Field Visit';").catch(() => {});
+    await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS duration_minutes INTEGER;").catch(() => {});
     await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS geo_verification_status VARCHAR(100);").catch(() => {});
     await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS checkin_time TIMESTAMP WITH TIME ZONE;").catch(() => {});
     await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS checkout_time TIMESTAMP WITH TIME ZONE;").catch(() => {});
@@ -100,8 +155,53 @@ export const seedDatabase = async () => {
 
     // Users login tracking columns
     await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP WITH TIME ZONE;").catch(() => {});
+    await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_url TEXT;").catch(() => {});
     await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_ip VARCHAR(100);").catch(() => {});
     await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_device TEXT;").catch(() => {});
+    await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS personal_email VARCHAR(255);").catch(() => {});
+    await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER;").catch(() => {});
+    await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS date_of_birth DATE;").catch(() => {});
+    await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(50);").catch(() => {});
+    await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS about TEXT;").catch(() => {});
+    await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_change_count INTEGER DEFAULT 0;").catch(() => {});
+    await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_change_limit INTEGER DEFAULT 3;").catch(() => {});
+    await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_change_locked BOOLEAN DEFAULT FALSE;").catch(() => {});
+    await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS monthly_target INTEGER DEFAULT 0;").catch(() => {});
+
+
+    // Telecalling workflow columns for appointments
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS telecalling_status VARCHAR(50);").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS telecaller_id INTEGER REFERENCES users(id) ON DELETE SET NULL;").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS callback_date TIMESTAMP WITH TIME ZONE;").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS outbound_notes TEXT;").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS moved_to_telecalling BOOLEAN DEFAULT FALSE;").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS moved_to_telecalling_at TIMESTAMP WITH TIME ZONE;").catch(() => {});
+
+    // Restructured appointment portal columns
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS created_by_user_id INTEGER;").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS created_by_name VARCHAR(255);").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS created_by_role VARCHAR(100);").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS appointment_type VARCHAR(100) DEFAULT 'doctor';").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS status VARCHAR(100) DEFAULT 'Scheduled';").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS patient_id VARCHAR(100);").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS service_name VARCHAR(255);").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS department VARCHAR(255);").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS visit_type VARCHAR(100);").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS chief_complaint TEXT;").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS dental_concern TEXT;").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS treatment_type VARCHAR(255);").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS technician_id INTEGER;").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS number_of_sessions INTEGER;").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS session_duration INTEGER;").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS package_type VARCHAR(100);").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS service_remarks TEXT;").catch(() => {});
+    await query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_splits JSONB DEFAULT NULL;").catch(() => {});
+    await query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS upi_app VARCHAR(100);").catch(() => {});
+    await query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS payer_upi_id VARCHAR(255);").catch(() => {});
+
+    await query("UPDATE appointments SET appointment_type = 'doctor' WHERE appointment_type IS NULL;").catch(() => {});
+    await query("UPDATE appointments SET status = 'Scheduled' WHERE status IS NULL;").catch(() => {});
+    await query("CREATE INDEX IF NOT EXISTS idx_appointments_technician ON appointments(technician_id);").catch(() => {});
 
     // Database indexing for dashboard performance (additional requirements)
     await query("CREATE INDEX IF NOT EXISTS idx_appointments_created_at ON appointments(created_at);").catch(() => {});
@@ -128,13 +228,94 @@ export const seedDatabase = async () => {
 
     await query("CREATE INDEX IF NOT EXISTS idx_appointment_edit_history_appointment ON appointment_edit_history(appointment_id);").catch(() => {});
 
+    // Create therapy tables
+    await query(`
+      CREATE TABLE IF NOT EXISTS therapy_sessions (
+        id SERIAL PRIMARY KEY,
+        patient_name VARCHAR(255) NOT NULL,
+        mobile_number VARCHAR(100) NOT NULL,
+        therapy_type VARCHAR(100) NOT NULL, -- 'HBOT', 'Ozone', 'Physiotherapy', etc.
+        timings VARCHAR(255),
+        rescheduled VARCHAR(50) DEFAULT 'No',
+        rescheduled_date VARCHAR(100),
+        rescheduled_time VARCHAR(100),
+        actual_start VARCHAR(100),
+        session_date DATE NOT NULL,
+        end_time VARCHAR(100),
+        op_technician_id INTEGER,
+        sop_technician_id INTEGER,
+        op_verified BOOLEAN DEFAULT FALSE,
+        sop_verified BOOLEAN DEFAULT FALSE,
+        verification_date TIMESTAMP WITH TIME ZONE,
+        status VARCHAR(100) DEFAULT 'Pending Verification',
+        remarks TEXT,
+        hospital_id INTEGER,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `).catch((err) => console.error('Failed to create therapy_sessions table in Postgres:', err));
+
+    const specificTables = [
+      'therapy_hbot', 'therapy_ozone', 'therapy_physiotherapy', 'therapy_dental', 
+      'therapy_pelvic_chair', 'therapy_sipcd', 'therapy_zero_gravity'
+    ];
+
+    for (const tbl of specificTables) {
+      await query(`
+        CREATE TABLE IF NOT EXISTS ${tbl} (
+          id SERIAL PRIMARY KEY,
+          session_id INTEGER NOT NULL REFERENCES therapy_sessions(id) ON DELETE CASCADE,
+          dive_surface_timings VARCHAR(255),
+          pressure_type VARCHAR(100),
+          pressure_value INTEGER,
+          next_session_date VARCHAR(100),
+          next_session_time VARCHAR(100),
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+      `).catch((err) => console.error(`Failed to create ${tbl} table in Postgres:`, err));
+    }
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS therapy_hydrogen_inhalation (
+        id SERIAL PRIMARY KEY,
+        session_id INTEGER NOT NULL REFERENCES therapy_sessions(id) ON DELETE CASCADE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `).catch((err) => console.error('Failed to create therapy_hydrogen_inhalation table in Postgres:', err));
+
+    await query(`
+      CREATE TABLE IF NOT EXISTS therapy_lab (
+        id SERIAL PRIMARY KEY,
+        session_id INTEGER NOT NULL REFERENCES therapy_sessions(id) ON DELETE CASCADE,
+        tests TEXT,
+        reported VARCHAR(50) DEFAULT 'No',
+        report_printed VARCHAR(50) DEFAULT 'No',
+        whatsapp_report VARCHAR(50) DEFAULT 'Not Sent',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `).catch((err) => console.error('Failed to create therapy_lab table in Postgres:', err));
+
+    await query("CREATE INDEX IF NOT EXISTS idx_therapy_sessions_patient ON therapy_sessions(patient_name);").catch(() => {});
+    await query("CREATE INDEX IF NOT EXISTS idx_therapy_sessions_date ON therapy_sessions(session_date);").catch(() => {});
+    await query("CREATE INDEX IF NOT EXISTS idx_therapy_sessions_hospital ON therapy_sessions(hospital_id);").catch(() => {});
+    await query("CREATE INDEX IF NOT EXISTS idx_therapy_sessions_op ON therapy_sessions(op_technician_id);").catch(() => {});
+    await query("CREATE INDEX IF NOT EXISTS idx_therapy_sessions_sop ON therapy_sessions(sop_technician_id);").catch(() => {});
+
     // Run VVF UID Standardization & Backfill migration
     await standardizeHospitalUIDs();
+
 
     console.log('Database schema checked/initialized successfully in Postgres.');
   } catch (err: any) {
     console.error('Failed to run schema migrations:', err.message);
   }
+  } else {
+    console.log('Postgres database is not reachable. Skipping migrations.');
+  }
+
 
   const users = [
     {
@@ -144,8 +325,16 @@ export const seedDatabase = async () => {
       password_hash: hashPassword(process.env.INITIAL_SUPERADMIN_PASSWORD || 'superadmin123'),
       role: 'Superadmin',
       phone: '+91 9999999990',
+      personal_email: 'superadmin.personal@vvf.org',
+      age: 42,
+      date_of_birth: '1983-04-12',
+      gender: 'Male',
+      about: 'Oversees platform governance, security policies, and organization-wide system configuration.',
       is_active: true,
-      is_deleted: false
+      is_deleted: false,
+      password_change_count: 0,
+      password_change_limit: 3,
+      password_change_locked: false
     },
     {
       id: 1,
@@ -154,18 +343,34 @@ export const seedDatabase = async () => {
       password_hash: hashPassword('admin123'),
       role: 'Admin',
       phone: '+91 9999999991',
+      personal_email: 'admin.personal@vvf.org',
+      age: 38,
+      date_of_birth: '1987-08-20',
+      gender: 'Male',
+      about: 'Manages hospital operations, staff coordination, and daily clinical workflow oversight.',
       is_active: true,
-      is_deleted: false
+      is_deleted: false,
+      password_change_count: 0,
+      password_change_limit: 3,
+      password_change_locked: false
     },
     {
       id: 2,
-      name: 'Dr. Venkat S. (Chief)',
-      email: 'chief@vvf.org',
-      password_hash: hashPassword('chief123'),
-      role: 'Chief Doctor',
+      name: 'Dr. Venkat S. (Dental)',
+      email: 'dental@vvf.org',
+      password_hash: hashPassword('dental123'),
+      role: 'Dental Doctor',
       phone: '+91 9999999992',
+      personal_email: 'venkat.personal@vvf.org',
+      age: 52,
+      date_of_birth: '1973-01-15',
+      gender: 'Male',
+      about: 'Lead dentist guiding clinical standards, dental teams, and treatment protocols.',
       is_active: true,
-      is_deleted: false
+      is_deleted: false,
+      password_change_count: 0,
+      password_change_limit: 3,
+      password_change_locked: false
     },
     {
       id: 3,
@@ -174,8 +379,16 @@ export const seedDatabase = async () => {
       password_hash: hashPassword('doctor123'),
       role: 'Doctor',
       phone: '+91 9999999993',
+      personal_email: 'rajesh.personal@vvf.org',
+      age: 41,
+      date_of_birth: '1984-11-03',
+      gender: 'Male',
+      about: 'Consultant physician handling patient appointments, diagnostics, and vascular care plans.',
       is_active: true,
-      is_deleted: false
+      is_deleted: false,
+      password_change_count: 0,
+      password_change_limit: 3,
+      password_change_locked: false
     },
     {
       id: 4,
@@ -184,8 +397,16 @@ export const seedDatabase = async () => {
       password_hash: hashPassword('reception123'),
       role: 'Reception',
       phone: '+91 9999999994',
+      personal_email: 'priya.personal@vvf.org',
+      age: 29,
+      date_of_birth: '1996-06-28',
+      gender: 'Female',
+      about: 'Front-desk receptionist managing patient check-ins, billing support, and appointment scheduling.',
       is_active: true,
-      is_deleted: false
+      is_deleted: false,
+      password_change_count: 0,
+      password_change_limit: 3,
+      password_change_locked: false
     },
     {
       id: 5,
@@ -194,8 +415,16 @@ export const seedDatabase = async () => {
       password_hash: hashPassword('telecaller123'),
       role: 'Telecaller',
       phone: '+91 9999999995',
+      personal_email: 'amit.personal@vvf.org',
+      age: 27,
+      date_of_birth: '1998-09-10',
+      gender: 'Male',
+      about: 'Outbound telecaller coordinating patient follow-ups, lead nurturing, and callback scheduling.',
       is_active: true,
-      is_deleted: false
+      is_deleted: false,
+      password_change_count: 0,
+      password_change_limit: 3,
+      password_change_locked: false
     },
     {
       id: 6,
@@ -204,8 +433,52 @@ export const seedDatabase = async () => {
       password_hash: hashPassword('executive123'),
       role: 'Executive',
       phone: '+91 9999999996',
+      personal_email: 'rohan.personal@vvf.org',
+      age: 31,
+      date_of_birth: '1994-12-05',
+      gender: 'Male',
+      about: 'Field executive conducting partner hospital visits, GPS check-ins, and on-site audits.',
       is_active: true,
-      is_deleted: false
+      is_deleted: false,
+      password_change_count: 0,
+      password_change_limit: 3,
+      password_change_locked: false
+    },
+    {
+      id: 7,
+      name: 'Ramesh OP Tech',
+      email: 'optech@vvf.org',
+      password_hash: hashPassword('optech123'),
+      role: 'OP Technician',
+      phone: '+91 9999999997',
+      personal_email: 'ramesh.personal@vvf.org',
+      age: 28,
+      date_of_birth: '1998-05-14',
+      gender: 'Male',
+      about: 'Operative technician managing clinical therapy machinery and patient dive sessions.',
+      is_active: true,
+      is_deleted: false,
+      password_change_count: 0,
+      password_change_limit: 3,
+      password_change_locked: false
+    },
+    {
+      id: 8,
+      name: 'Suresh SOP Tech',
+      email: 'soptech@vvf.org',
+      password_hash: hashPassword('soptech123'),
+      role: 'SOP Technician',
+      phone: '+91 9999999998',
+      personal_email: 'suresh.personal@vvf.org',
+      age: 34,
+      date_of_birth: '1992-10-19',
+      gender: 'Male',
+      about: 'Senior operative technician reviewing technician logs and verifying sessions safety compliance.',
+      is_active: true,
+      is_deleted: false,
+      password_change_count: 0,
+      password_change_limit: 3,
+      password_change_locked: false
     }
   ];
 
@@ -325,7 +598,8 @@ export const seedDatabase = async () => {
       transaction_ref: 'TXN9090123',
       notes: 'Full payment received at desk',
       created_by: 4,
-      created_at: new Date(Date.now() - 1000 * 60 * 60 * 1).toISOString()
+      created_at: new Date(Date.now() - 1000 * 60 * 60 * 1).toISOString(),
+      payment_splits: null
     },
     {
       id: 2,
@@ -335,7 +609,8 @@ export const seedDatabase = async () => {
       transaction_ref: 'CASH-REC-102',
       notes: 'Registration fee paid',
       created_by: 4,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      payment_splits: null
     }
   ];
 
@@ -419,6 +694,97 @@ export const seedDatabase = async () => {
     }
   ];
 
+  const therapy_sessions = [
+    {
+      id: 1,
+      patient_name: 'Harish Rao',
+      mobile_number: '9848022338',
+      therapy_type: 'HBOT',
+      timings: '09:00 AM - 10:00 AM',
+      rescheduled: 'No',
+      actual_start: '09:05 AM',
+      session_date: '2026-06-15',
+      end_time: '10:05 AM',
+      op_technician_id: 7,
+      sop_technician_id: 8,
+      op_verified: true,
+      sop_verified: false,
+      status: 'Pending Verification',
+      hospital_id: 1
+    },
+    {
+      id: 2,
+      patient_name: 'Lakshmi K.',
+      mobile_number: '9123456789',
+      therapy_type: 'Lab',
+      timings: '10:00 AM - 11:00 AM',
+      rescheduled: 'No',
+      actual_start: '10:00 AM',
+      session_date: '2026-06-15',
+      end_time: '10:30 AM',
+      op_technician_id: 7,
+      sop_technician_id: 8,
+      op_verified: false,
+      sop_verified: false,
+      status: 'Pending Verification',
+      hospital_id: 1
+    },
+    {
+      id: 3,
+      patient_name: 'Anand Kumar',
+      mobile_number: '9440123456',
+      therapy_type: 'Hydrogen Inhalation',
+      timings: '11:00 AM - 11:30 AM',
+      rescheduled: 'No',
+      actual_start: '',
+      session_date: '2026-06-15',
+      end_time: '',
+      op_technician_id: 7,
+      sop_technician_id: 8,
+      op_verified: false,
+      sop_verified: false,
+      status: 'Pending Verification',
+      hospital_id: 2
+    }
+  ];
+
+  const therapy_hbot = [
+    {
+      id: 1,
+      session_id: 1,
+      dive_surface_timings: 'Dive: 09:00 AM\nSurface: 10:15 AM',
+      pressure_type: 'Cylinder Pressure',
+      pressure_value: 120,
+      next_session_date: '2026-06-20',
+      next_session_time: '09:00 AM'
+    }
+  ];
+
+  const therapy_lab = [
+    {
+      id: 1,
+      session_id: 2,
+      tests: 'CBC, LFT, Blood Sugar',
+      reported: 'Yes',
+      report_printed: 'No',
+      whatsapp_report: 'Not Sent'
+    }
+  ];
+
+  const therapy_hydrogen_inhalation = [
+    {
+      id: 1,
+      session_id: 3
+    }
+  ];
+
+  const therapy_ozone: any[] = [];
+  const therapy_physiotherapy: any[] = [];
+  const therapy_dental: any[] = [];
+  const therapy_pelvic_chair: any[] = [];
+  const therapy_sipcd: any[] = [];
+  const therapy_zero_gravity: any[] = [];
+
   // Try seed local file database
   localDb.seed({
     users,
@@ -428,33 +794,123 @@ export const seedDatabase = async () => {
     leads,
     visits,
     visit_photos,
-    notifications
+    notifications,
+    therapy_sessions,
+    therapy_hbot,
+    therapy_ozone,
+    therapy_physiotherapy,
+    therapy_dental,
+    therapy_pelvic_chair,
+    therapy_sipcd,
+    therapy_zero_gravity,
+    therapy_hydrogen_inhalation,
+    therapy_lab
   });
 
   // Try seed PostgreSQL database
+  if (isPostgresConnected) {
+    try {
+      for (const u of users) {
+        await query(`
+          INSERT INTO users (id, name, email, password_hash, role, phone, personal_email, age, date_of_birth, gender, about, is_active, is_deleted, password_change_count, password_change_limit, password_change_locked)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+          ON CONFLICT (id) DO UPDATE SET
+            personal_email = COALESCE(users.personal_email, EXCLUDED.personal_email),
+            age = COALESCE(users.age, EXCLUDED.age),
+            date_of_birth = COALESCE(users.date_of_birth, EXCLUDED.date_of_birth),
+            gender = COALESCE(users.gender, EXCLUDED.gender),
+            about = COALESCE(users.about, EXCLUDED.about)
+        `, [u.id, u.name, u.email, u.password_hash, u.role, u.phone, u.personal_email, u.age, u.date_of_birth, u.gender, u.about, u.is_active, u.is_deleted, u.password_change_count, u.password_change_limit, u.password_change_locked]);
+      }
+      for (const h of hospitals) {
+        await query(`
+          INSERT INTO hospitals (id, name, city, state, contact_person, phone, status, latitude, longitude, is_deleted, geofencing_enabled, hospital_uid)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          ON CONFLICT (id) DO UPDATE SET 
+            latitude = EXCLUDED.latitude, 
+            longitude = EXCLUDED.longitude, 
+            geofencing_enabled = EXCLUDED.geofencing_enabled,
+            hospital_uid = COALESCE(hospitals.hospital_uid, EXCLUDED.hospital_uid)
+        `, [h.id, h.name, h.city, h.state, h.contact_person, h.phone, h.status, h.latitude, h.longitude, h.is_deleted, h.geofencing_enabled !== undefined ? h.geofencing_enabled : true, h.hospital_uid]);
+      }
+      for (const s of therapy_sessions) {
+        await query(`
+          INSERT INTO therapy_sessions (id, patient_name, mobile_number, therapy_type, timings, rescheduled, actual_start, session_date, end_time, op_technician_id, sop_technician_id, op_verified, sop_verified, status, hospital_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          ON CONFLICT (id) DO NOTHING
+        `, [s.id, s.patient_name, s.mobile_number, s.therapy_type, s.timings, s.rescheduled, s.actual_start || null, s.session_date, s.end_time || null, s.op_technician_id, s.sop_technician_id, s.op_verified, s.sop_verified, s.status, s.hospital_id]);
+      }
+      for (const h of therapy_hbot) {
+        await query(`
+          INSERT INTO therapy_hbot (id, session_id, dive_surface_timings, pressure_type, pressure_value, next_session_date, next_session_time)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          ON CONFLICT (id) DO NOTHING
+        `, [h.id, h.session_id, h.dive_surface_timings, h.pressure_type, h.pressure_value, h.next_session_date, h.next_session_time]);
+      }
+      for (const l of therapy_lab) {
+        await query(`
+          INSERT INTO therapy_lab (id, session_id, tests, reported, report_printed, whatsapp_report)
+          VALUES ($1, $2, $3, $4, $5, $6)
+          ON CONFLICT (id) DO NOTHING
+        `, [l.id, l.session_id, l.tests, l.reported, l.report_printed, l.whatsapp_report]);
+      }
+      for (const hy of therapy_hydrogen_inhalation) {
+        await query(`
+          INSERT INTO therapy_hydrogen_inhalation (id, session_id)
+          VALUES ($1, $2)
+          ON CONFLICT (id) DO NOTHING
+        `, [hy.id, hy.session_id]);
+      }
+      // Set serial sequences correctly in postgres
+      await query("SELECT setval('users_id_seq', (SELECT MAX(id) FROM users))").catch(() => {});
+      await query("SELECT setval('hospitals_id_seq', (SELECT MAX(id) FROM hospitals))").catch(() => {});
+      await query("SELECT setval('therapy_sessions_id_seq', (SELECT MAX(id) FROM therapy_sessions))").catch(() => {});
+      await query("SELECT setval('therapy_hbot_id_seq', (SELECT MAX(id) FROM therapy_hbot))").catch(() => {});
+      await query("SELECT setval('therapy_lab_id_seq', (SELECT MAX(id) FROM therapy_lab))").catch(() => {});
+      await query("SELECT setval('therapy_hydrogen_inhalation_id_seq', (SELECT MAX(id) FROM therapy_hydrogen_inhalation))").catch(() => {});
+    } catch (err) {
+      // Suppress pg query issues as fallback takes care of it
+      console.error('Postgres seeding error for therapies:', err);
+    }
+  }
+
+  // Local JSON Database Backfill Migration
   try {
-    for (const u of users) {
-      await query(`
-        INSERT INTO users (id, name, email, password_hash, role, phone, is_active, is_deleted)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        ON CONFLICT (id) DO NOTHING
-      `, [u.id, u.name, u.email, u.password_hash, u.role, u.phone, u.is_active, u.is_deleted]);
+    const localDbPath = path.join(__dirname, '../../data/local_db.json');
+    if (fs.existsSync(localDbPath)) {
+      const rawData = fs.readFileSync(localDbPath, 'utf8');
+      const data = JSON.parse(rawData);
+      if (data.appointments && data.appointments.length > 0) {
+        let updated = false;
+        data.appointments.forEach((app: any) => {
+          if (!app.appointment_type) {
+            app.appointment_type = 'doctor';
+            updated = true;
+          }
+          if (!app.status) {
+            app.status = 'Scheduled';
+            updated = true;
+          }
+          const fields = [
+            'patient_id', 'service_name', 'department', 'visit_type', 
+            'chief_complaint', 'dental_concern', 'treatment_type', 
+            'technician_id', 'number_of_sessions', 'session_duration', 
+            'package_type', 'service_remarks'
+          ];
+          fields.forEach(f => {
+            if (app[f] === undefined) {
+              app[f] = null;
+              updated = true;
+            }
+          });
+        });
+        if (updated) {
+          fs.writeFileSync(localDbPath, JSON.stringify(data, null, 2), 'utf8');
+          console.log('Seeded / Backfilled local JSON database with appointment restructure fields.');
+        }
+      }
     }
-    for (const h of hospitals) {
-      await query(`
-        INSERT INTO hospitals (id, name, city, state, contact_person, phone, status, latitude, longitude, is_deleted, geofencing_enabled, hospital_uid)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-        ON CONFLICT (id) DO UPDATE SET 
-          latitude = EXCLUDED.latitude, 
-          longitude = EXCLUDED.longitude, 
-          geofencing_enabled = EXCLUDED.geofencing_enabled,
-          hospital_uid = COALESCE(hospitals.hospital_uid, EXCLUDED.hospital_uid)
-      `, [h.id, h.name, h.city, h.state, h.contact_person, h.phone, h.status, h.latitude, h.longitude, h.is_deleted, h.geofencing_enabled !== undefined ? h.geofencing_enabled : true, h.hospital_uid]);
-    }
-    // Set serial sequences correctly in postgres
-    await query("SELECT setval('users_id_seq', (SELECT MAX(id) FROM users))").catch(() => {});
-    await query("SELECT setval('hospitals_id_seq', (SELECT MAX(id) FROM hospitals))").catch(() => {});
-  } catch (err) {
-    // Suppress pg query issues as fallback takes care of it
+  } catch (err: any) {
+    console.error('Failed to backfill local database:', err.message);
   }
 };

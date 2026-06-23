@@ -201,11 +201,11 @@ export default function TelecallerPage() {
         {/* Header Block */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-lg sm:text-2xl font-bold text-primary-text flex items-center gap-2">
+            <h1 className="text-lg sm:text-2xl font-bold text-slate-500 flex items-center gap-2">
               Telecalling & Patient Outreach
               <PhoneCall className="h-5 w-5 text-primary-green" />
             </h1>
-            <p className="text-sm text-secondary-text mt-0.5">
+            <p className="text-sm text-slate-500 mt-0.5">
               Outbound patient lead checklists, appointment callback schedules, and logs.
             </p>
           </div>
@@ -251,12 +251,12 @@ export default function TelecallerPage() {
                     className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition-all duration-200 border cursor-pointer ${
                       !selectedTelecallerFilter
                         ? 'bg-very-light-green/70 text-primary-green border-primary-green'
-                        : 'bg-white text-secondary-text border-border-gray hover:bg-secondary-bg hover:text-primary-green'
+                        : 'bg-white text-slate-500 border-border-gray hover:bg-secondary-bg hover:text-primary-green'
                     }`}
                   >
                     <span>All Assignments</span>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                      !selectedTelecallerFilter ? 'bg-primary-green text-white' : 'bg-secondary-bg text-secondary-text border border-border-gray'
+                      !selectedTelecallerFilter ? 'bg-primary-green text-white' : 'bg-secondary-bg text-slate-500 border border-border-gray'
                     }`}>
                       {leads.length}
                     </span>
@@ -274,7 +274,7 @@ export default function TelecallerPage() {
                         className={`w-full text-left px-3 py-2.5 rounded-xl text-xs flex items-center justify-between transition-all duration-200 border cursor-pointer ${
                           isSelected
                             ? 'bg-very-light-green/70 text-primary-green border-primary-green shadow-sm'
-                            : 'bg-white text-secondary-text border-border-gray hover:bg-secondary-bg hover:text-primary-green'
+                            : 'bg-white text-slate-500 border-border-gray hover:bg-secondary-bg hover:text-primary-green'
                         }`}
                       >
                         <div className="flex items-center gap-2 min-w-0">
@@ -289,7 +289,7 @@ export default function TelecallerPage() {
                           </div>
                         </div>
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
-                          isSelected ? 'bg-primary-green text-white' : 'bg-secondary-bg text-secondary-text border border-border-gray'
+                          isSelected ? 'bg-primary-green text-white' : 'bg-secondary-bg text-slate-500 border border-border-gray'
                         }`}>
                           {tcLeadsCount}
                         </span>
@@ -306,19 +306,19 @@ export default function TelecallerPage() {
             {/* Search Panel */}
             <div className="flex flex-col gap-3 bg-white border border-border-gray p-3 rounded-xl shadow-sm">
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-3 h-4.5 w-4.5 text-secondary-text" />
+                <Search className="absolute left-3 top-3 h-4.5 w-4.5 text-slate-500" />
                 <input
                   id="lead-search"
                   type="text"
                   placeholder="Search leads by name, phone, or notes..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2.5 pl-10 pr-4 text-xs text-primary-text placeholder-slate-400 outline-none transition-all"
+                  className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2.5 pl-10 pr-4 text-xs text-slate-500 placeholder-slate-400 outline-none transition-all"
                 />
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-secondary-text font-medium">Outreach Status:</span>
+                <span className="text-xs text-slate-500 font-medium">Outreach Status:</span>
                 <div className="flex flex-wrap gap-1">
                   {['All', 'Interested', 'Follow-up', 'Confirmed', 'Not Responding'].map((st) => (
                     <button
@@ -328,7 +328,7 @@ export default function TelecallerPage() {
                       className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
                         statusFilter === st
                           ? 'bg-very-light-green/60 text-emerald-500 border border-emerald-500/30'
-                          : 'bg-white text-secondary-text border border-border-gray hover:bg-secondary-bg'
+                          : 'bg-white text-slate-500 border border-border-gray hover:bg-secondary-bg'
                       }`}
                     >
                       {st}
@@ -341,7 +341,7 @@ export default function TelecallerPage() {
             {/* Date Filters Bar */}
             <div className="flex flex-wrap items-center justify-between gap-2 bg-white border border-border-gray p-3 rounded-xl shadow-sm">
               <div className="flex items-center gap-3">
-                <span className="text-xs text-secondary-text font-medium">Callback Period:</span>
+                <span className="text-xs text-slate-500 font-medium">Callback Period:</span>
                 <div className="flex flex-wrap gap-1">
                   {[
                     { name: 'All Days', value: 'All' },
@@ -356,7 +356,7 @@ export default function TelecallerPage() {
                       className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all ${
                         dateFilter === df.value
                           ? 'bg-very-light-green/60 text-emerald-500 border border-emerald-500/30'
-                          : 'bg-white text-secondary-text border border-border-gray hover:bg-secondary-bg'
+                          : 'bg-white text-slate-500 border border-border-gray hover:bg-secondary-bg'
                       }`}
                     >
                       {df.name}
@@ -366,7 +366,7 @@ export default function TelecallerPage() {
               </div>
 
               {selectedTelecallerFilter && (
-                <div className="text-xs text-secondary-text bg-secondary-bg px-3 py-1.5 rounded-lg border border-border-gray font-medium flex items-center gap-1.5 animate-fadeIn">
+                <div className="text-xs text-slate-500 bg-secondary-bg px-3 py-1.5 rounded-lg border border-border-gray font-medium flex items-center gap-1.5 animate-fadeIn">
                   <span>Showing:</span>
                   <span className="text-primary-green font-semibold">
                     {staff.find((tc) => tc.id === selectedTelecallerFilter)?.name || 'Telecaller'}
@@ -390,7 +390,7 @@ export default function TelecallerPage() {
             ) : filteredLeads.length === 0 ? (
               <div className="bg-white/60 border border-border-gray p-12 text-center rounded-2xl flex flex-col items-center justify-center">
                 <PhoneCall className="h-10 w-10 text-slate-600 mb-3" />
-                <p className="text-secondary-text text-sm font-medium">No patient outreach logs matched queries.</p>
+                <p className="text-slate-500 text-sm font-medium">No patient outreach logs matched queries.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -407,10 +407,10 @@ export default function TelecallerPage() {
                     >
                       <div>
                         <div className="flex justify-between items-start gap-2 mb-3">
-                          <h3 className="font-bold text-primary-text text-sm truncate leading-tight">{lead.patient_name}</h3>
+                          <h3 className="font-bold text-slate-500 text-sm truncate leading-tight">{lead.patient_name}</h3>
                           <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold shrink-0 ${
                             lead.status === 'Confirmed' ? 'bg-very-light-green text-primary-green border border-light-green/40' :
-                            lead.status === 'Follow-up' ? 'bg-secondary-bg text-secondary-text border border-border-gray' :
+                            lead.status === 'Follow-up' ? 'bg-secondary-bg text-slate-500 border border-border-gray' :
                             lead.status === 'Interested' ? 'bg-very-light-green text-primary-green border border-light-green/40' :
                             'bg-alert-bg text-alert-text border border-alert-border'
                           }`}>
@@ -419,25 +419,25 @@ export default function TelecallerPage() {
                         </div>
 
                         <div className="space-y-2 bg-white/60 border border-border-gray p-3 rounded-xl mb-4 text-xs">
-                          <div className="flex items-center gap-2 text-secondary-text font-semibold">
-                            <Phone className="h-3.5 w-3.5 text-secondary-text" />
+                          <div className="flex items-center gap-2 text-slate-500 font-semibold">
+                            <Phone className="h-3.5 w-3.5 text-slate-500" />
                             <span>{lead.contact_number}</span>
                           </div>
                           {callback && (
-                            <div className="flex items-center gap-2 text-secondary-text font-semibold">
+                            <div className="flex items-center gap-2 text-slate-500 font-semibold">
                               <Calendar className="h-3.5 w-3.5 text-alert-text" />
                               <span>
                                 Callback: {callback.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} • {callback.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </span>
                             </div>
                           )}
-                          <div className="text-[10px] text-secondary-text border-t border-border-gray pt-2 truncate">
-                            Assigned Telecaller: <span className="text-secondary-text font-semibold">{lead.assigned_name || 'Unassigned'}</span>
+                          <div className="text-[10px] text-slate-500 border-t border-border-gray pt-2 truncate">
+                            Assigned Telecaller: <span className="text-slate-500 font-semibold">{lead.assigned_name || 'Unassigned'}</span>
                           </div>
                         </div>
 
                         {lead.notes && (
-                          <p className="text-[10px] text-secondary-text italic mb-4 bg-white/20 p-2.5 rounded-lg border border-border-gray leading-normal">
+                          <p className="text-[10px] text-slate-500 italic mb-4 bg-white/20 p-2.5 rounded-lg border border-border-gray leading-normal">
                             "{lead.notes}"
                           </p>
                         )}
@@ -457,7 +457,7 @@ export default function TelecallerPage() {
                           <button
                             id={`btn-edit-lead-${lead.id}`}
                             onClick={() => handleOpenEdit(lead)}
-                            className="p-1.5 text-secondary-text hover:text-primary-green hover:bg-very-light-green rounded-lg cursor-pointer transition-colors"
+                            className="p-1.5 text-slate-500 hover:text-primary-green hover:bg-very-light-green rounded-lg cursor-pointer transition-colors"
                             title="Edit Outreach details"
                           >
                             <Edit3 className="h-4 w-4" />
@@ -465,7 +465,7 @@ export default function TelecallerPage() {
                           <button
                             id={`btn-delete-lead-${lead.id}`}
                             onClick={() => handleDelete(lead.id)}
-                            className="p-1.5 text-secondary-text hover:text-alert-text hover:bg-very-light-green rounded-lg cursor-pointer transition-colors"
+                            className="p-1.5 text-slate-500 hover:text-alert-text hover:bg-very-light-green rounded-lg cursor-pointer transition-colors"
                             title="Delete Lead"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -499,18 +499,18 @@ export default function TelecallerPage() {
                 className="w-full max-w-md bg-white border border-border-gray rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col"
               >
                 <div className="px-6 py-4 border-b border-border-gray flex items-center justify-between">
-                  <h3 className="font-bold text-sm text-primary-text flex items-center gap-1.5">
+                  <h3 className="font-bold text-sm text-slate-500 flex items-center gap-1.5">
                     <Sparkles className="h-4.5 w-4.5 text-primary-green animate-pulse" />
                     {selectedLead ? 'Edit Lead Observations' : 'New Patient Referral'}
                   </h3>
-                  <button id="close-lead-modal" onClick={() => setIsFormOpen(false)} className="text-secondary-text hover:text-primary-green cursor-pointer">
+                  <button id="close-lead-modal" onClick={() => setIsFormOpen(false)} className="text-slate-500 hover:text-primary-green cursor-pointer">
                     <X className="h-4.5 w-4.5" />
                   </button>
                 </div>
 
                 <form onSubmit={handleFormSubmit} className="p-6 space-y-4">
                   <div>
-                    <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Patient Name</label>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Patient Name</label>
                     <input
                       id="form-lead-name"
                       type="text"
@@ -518,13 +518,13 @@ export default function TelecallerPage() {
                       value={patientName}
                       onChange={(e) => setPatientName(e.target.value)}
                       placeholder="Jane Austin"
-                      className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-primary-text outline-none"
+                      className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none"
                     />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Phone Number</label>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Phone Number</label>
                       <input
                         id="form-lead-phone"
                         type="tel"
@@ -532,11 +532,11 @@ export default function TelecallerPage() {
                         value={contactNumber}
                         onChange={(e) => setContactNumber(e.target.value)}
                         placeholder="9988776655"
-                        className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-primary-text outline-none"
+                        className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none"
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Outreach Status</label>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Outreach Status</label>
                       <SelectField
                         id="form-lead-status"
                         value={status}
@@ -555,17 +555,17 @@ export default function TelecallerPage() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Callback Schedule</label>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Callback Schedule</label>
                       <input
                         id="form-lead-callback"
                         type="datetime-local"
                         value={callbackTime}
                         onChange={(e) => setCallbackTime(e.target.value)}
-                        className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-primary-text outline-none"
+                        className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none"
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Assigned Telecaller</label>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Assigned Telecaller</label>
                       <SelectField
                         id="form-lead-assignee"
                         value={assignedTo}
@@ -588,14 +588,14 @@ export default function TelecallerPage() {
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Outbound Notes</label>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Outbound Notes</label>
                     <textarea
                       id="form-lead-notes"
                       rows={3}
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
                       placeholder="Suffering from varicose veins, wants weekend consult..."
-                      className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl p-3 text-xs text-primary-text outline-none resize-none"
+                      className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl p-3 text-xs text-slate-500 outline-none resize-none"
                     />
                   </div>
 
@@ -604,7 +604,7 @@ export default function TelecallerPage() {
                       id="btn-cancel-lead"
                       type="button"
                       onClick={() => setIsFormOpen(false)}
-                      className="px-4 py-2 border border-border-gray hover:bg-secondary-bg text-xs text-secondary-text rounded-xl transition-all cursor-pointer font-semibold"
+                      className="px-4 py-2 border border-border-gray hover:bg-secondary-bg text-xs text-slate-500 rounded-xl transition-all cursor-pointer font-semibold"
                     >
                       Cancel
                     </button>

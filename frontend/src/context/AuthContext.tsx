@@ -3,13 +3,21 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { api, setToken, removeToken } from '../lib/api';
+import { AutoLogoutWarningModal } from '../components/AutoLogoutWarningModal';
 
 export interface User {
   id: number;
   name: string;
   email: string;
-  role: 'Admin' | 'Chief Doctor' | 'Doctor' | 'Reception' | 'Telecaller' | 'Executive' | 'Superadmin';
+  role: 'Admin' | 'Dental Doctor' | 'Doctor' | 'Reception' | 'Telecaller' | 'Executive' | 'Superadmin' | 'OP Technician' | 'SOP Technician';
   phone?: string;
+  personal_email?: string | null;
+  age?: number | null;
+  date_of_birth?: string | null;
+  gender?: string | null;
+  about?: string | null;
+  is_active?: boolean;
+  photo_url?: string | null;
 }
 
 interface AuthContextType {
@@ -31,7 +39,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const [isPunchedIn, setIsPunchedIn] = useState(false);
   const [activePunchRecord, setActivePunchRecord] = useState<any | null>(null);
+  const [showWarningModal, setShowWarningModal] = useState(false);
+  const [warningDismissed, setWarningDismissed] = useState(false);
   const router = useRouter();
+
+  const getLoginPathForRole = (role: string) => {
+    const r = role.toLowerCase().trim();
+    if (r === 'dental doctor') return '/dental-doctor/login';
+    if (r === 'op technician') return '/op-technician/login';
+    if (r === 'sop technician') return '/sop-technician/login';
+    if (r === 'superadmin' || r === 'admin') return '/admin/login';
+    if (r === 'doctor') return '/doctor/login';
+    if (r === 'executive') return '/executive/login';
+    if (r === 'reception' || r === 'receptionist') return '/reception/login';
+    if (r === 'telecaller') return '/telecaller/login';
+    return '/login';
+  };
+
+  const isSessionExpiredBy1030PM = (loginTime: Date): boolean => {
+    const now = new Date();
+    const last1030PM = new Date(now);
+    last1030PM.setHours(22, 30, 0, 0);
+    if (now.getTime() < last1030PM.getTime()) {
+      last1030PM.setDate(last1030PM.getDate() - 1);
+    }
+    return loginTime.getTime() < last1030PM.getTime();
+  };
 
   // Load user details on boot
   useEffect(() => {
@@ -39,6 +72,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const token = localStorage.getItem('vvf_token');
         if (token) {
+          const loginTimeStr = localStorage.getItem('vvf_login_time');
+          if (loginTimeStr) {
+            const loginTime = new Date(loginTimeStr);
+            if (isSessionExpiredBy1030PM(loginTime)) {
+              console.warn('Session expired due to 10:30 PM auto-logout requirement.');
+              removeToken();
+              localStorage.removeItem('vvf_login_time');
+              setUser(null);
+              setLoading(false);
+              
+              const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+              let redirectPath = '/login';
+              if (pathname.startsWith('/admin') || pathname.startsWith('/superadmin')) redirectPath = '/admin/login';
+              else if (pathname.startsWith('/dental-doctor')) redirectPath = '/dental-doctor/login';
+              else if (pathname.startsWith('/doctor')) redirectPath = '/doctor/login';
+              else if (pathname.startsWith('/executive')) redirectPath = '/executive/login';
+              else if (pathname.startsWith('/reception')) redirectPath = '/reception/login';
+              else if (pathname.startsWith('/telecaller')) redirectPath = '/telecaller/login';
+              else if (pathname.startsWith('/op-technician')) redirectPath = '/op-technician/login';
+              else if (pathname.startsWith('/sop-technician')) redirectPath = '/sop-technician/login';
+              
+              router.push(redirectPath);
+              return;
+            }
+          } else {
+            localStorage.setItem('vvf_login_time', new Date().toISOString());
+          }
+
           const res = await api.auth.getMe();
           setUser(res.user);
           if (typeof window !== 'undefined') {
@@ -49,6 +110,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (err) {
         console.error('Failed to restore authentication session:', err);
         removeToken();
+        localStorage.removeItem('vvf_login_time');
         setUser(null);
       } finally {
         setLoading(false);
@@ -83,6 +145,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(res.token);
       if (typeof window !== 'undefined') {
         localStorage.setItem('vvf_role', res.user.role);
+        localStorage.setItem('vvf_login_time', new Date().toISOString());
       }
       setUser(res.user);
       await checkPunchStatus(res.user);
@@ -94,11 +157,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         const role = res.user.role.toLowerCase();
         if (role === 'admin') router.push('/admin/dashboard');
-        else if (role === 'chief doctor') router.push('/chief-doctor/dashboard');
+        else if (role === 'dental doctor') router.push('/dental-doctor/dashboard');
         else if (role === 'doctor') router.push('/doctor/dashboard');
         else if (role === 'executive') router.push('/executive/dashboard');
         else if (role === 'reception') router.push('/reception/dashboard');
         else if (role === 'telecaller') router.push('/telecaller/dashboard');
+        else if (role === 'op technician') router.push('/op-technician/dashboard');
+        else if (role === 'sop technician') router.push('/sop-technician/dashboard');
         else router.push('/dashboard');
       }
     } catch (err) {
@@ -121,10 +186,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.warn('Logout request failed, cleaning local storage directly.');
     } finally {
       removeToken();
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('vvf_login_time');
+      }
       setUser(null);
       setIsPunchedIn(false);
       setActivePunchRecord(null);
       setLoading(false);
+      setShowWarningModal(false);
+      setWarningDismissed(false);
       router.push(redirectPath || '/login');
     }
   };
@@ -149,6 +219,121 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(prev => prev ? { ...prev, ...updatedFields } as User : null);
   };
 
+  const triggerAutoLogout = async () => {
+    setLoading(true);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('vvf_token') : null;
+      if (token) {
+        await api.auth.autoLogout();
+      }
+    } catch (err) {
+      console.warn('Auto logout request failed, cleaning local storage directly.');
+    } finally {
+      const currentRole = typeof window !== 'undefined' ? localStorage.getItem('vvf_role') : null;
+      const roleStr = currentRole || (user ? user.role : '');
+
+      removeToken();
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('vvf_login_time');
+      }
+      setUser(null);
+      setIsPunchedIn(false);
+      setActivePunchRecord(null);
+      setLoading(false);
+      setShowWarningModal(false);
+      setWarningDismissed(false);
+
+      let redirectPath = '/login';
+      if (typeof window !== 'undefined') {
+        const pathname = window.location.pathname;
+        if (pathname.startsWith('/admin') || pathname.startsWith('/superadmin')) redirectPath = '/admin/login';
+        else if (pathname.startsWith('/dental-doctor')) redirectPath = '/dental-doctor/login';
+        else if (pathname.startsWith('/doctor')) redirectPath = '/doctor/login';
+        else if (pathname.startsWith('/executive')) redirectPath = '/executive/login';
+        else if (pathname.startsWith('/reception')) redirectPath = '/reception/login';
+        else if (pathname.startsWith('/telecaller')) redirectPath = '/telecaller/login';
+        else if (pathname.startsWith('/op-technician')) redirectPath = '/op-technician/login';
+        else if (pathname.startsWith('/sop-technician')) redirectPath = '/sop-technician/login';
+        else {
+          redirectPath = getLoginPathForRole(roleStr);
+        }
+      } else {
+        redirectPath = getLoginPathForRole(roleStr);
+      }
+      router.push(redirectPath);
+    }
+  };
+
+  // Check auto-logout & warning state every 5 seconds
+  useEffect(() => {
+    if (!user) {
+      setShowWarningModal(false);
+      setWarningDismissed(false);
+      return;
+    }
+
+    const checkAutoLogout = () => {
+      const now = new Date();
+      const currentHours = now.getHours();
+      const currentMinutes = now.getMinutes();
+
+      // Warning window: 10:25 PM to 10:29:59 PM (22:25 to 22:29)
+      const isInWarningWindow = currentHours === 22 && currentMinutes >= 25 && currentMinutes < 30;
+
+      if (isInWarningWindow) {
+        if (!warningDismissed) {
+          setShowWarningModal(true);
+        }
+      } else {
+        setShowWarningModal(false);
+        setWarningDismissed(false);
+      }
+
+      // Invalidate if login time was before the last 10:30 PM threshold
+      const loginTimeStr = localStorage.getItem('vvf_login_time');
+      if (loginTimeStr) {
+        const loginTime = new Date(loginTimeStr);
+        if (isSessionExpiredBy1030PM(loginTime)) {
+          triggerAutoLogout();
+        }
+      }
+    };
+
+    checkAutoLogout();
+    const interval = setInterval(checkAutoLogout, 5000);
+    return () => clearInterval(interval);
+  }, [user, warningDismissed]);
+
+  // Sync token removal across multiple tabs
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'vvf_token' && !e.newValue) {
+        setUser(null);
+        setIsPunchedIn(false);
+        setActivePunchRecord(null);
+        setShowWarningModal(false);
+        setWarningDismissed(false);
+
+        let redirectPath = '/login';
+        if (typeof window !== 'undefined') {
+          const pathname = window.location.pathname;
+          if (pathname.startsWith('/admin') || pathname.startsWith('/superadmin')) redirectPath = '/admin/login';
+          else if (pathname.startsWith('/dental-doctor')) redirectPath = '/dental-doctor/login';
+          else if (pathname.startsWith('/doctor')) redirectPath = '/doctor/login';
+          else if (pathname.startsWith('/executive')) redirectPath = '/executive/login';
+          else if (pathname.startsWith('/reception')) redirectPath = '/reception/login';
+          else if (pathname.startsWith('/telecaller')) redirectPath = '/telecaller/login';
+          else if (pathname.startsWith('/op-technician')) redirectPath = '/op-technician/login';
+          else if (pathname.startsWith('/sop-technician')) redirectPath = '/sop-technician/login';
+        }
+        router.push(redirectPath);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [router]);
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -162,6 +347,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updateUser
     }}>
       {children}
+      {showWarningModal && (
+        <AutoLogoutWarningModal onDismiss={() => setWarningDismissed(true)} />
+      )}
     </AuthContext.Provider>
   );
 };

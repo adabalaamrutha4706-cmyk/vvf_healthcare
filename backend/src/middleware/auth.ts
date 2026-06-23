@@ -9,7 +9,7 @@ export interface AuthenticatedRequest extends Request {
     id: number;
     name: string;
     email: string;
-    role: 'Admin' | 'Chief Doctor' | 'Doctor' | 'Reception' | 'Telecaller' | 'Executive' | 'Superadmin';
+    role: 'Admin' | 'Dental Doctor' | 'Doctor' | 'Reception' | 'Telecaller' | 'Executive' | 'Superadmin' | 'OP Technician' | 'SOP Technician';
   };
 }
 

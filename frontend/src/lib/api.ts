@@ -1,4 +1,5 @@
-const API_BASE_URL = 'http://localhost:5000/api';
+export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+const API_BASE_URL = `${BACKEND_URL}/api`;
 
 // Helper to retrieve token from localStorage
 export const getToken = (): string | null => {
@@ -49,12 +50,14 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
     if (role) {
       const r = role.toLowerCase().trim();
       if (r === 'admin') prefix = '/admin';
-      else if (r === 'chief doctor') prefix = '/chief-doctor';
+      else if (r === 'dental doctor') prefix = '/dental-doctor';
       else if (r === 'doctor') prefix = '/doctor';
       else if (r === 'executive') prefix = '/executive';
       else if (r === 'reception') prefix = '/reception';
       else if (r === 'telecaller') prefix = '/telecaller';
       else if (r === 'superadmin') prefix = '/admin';
+      else if (r === 'op technician') prefix = '/op-technician';
+      else if (r === 'sop technician') prefix = '/sop-technician';
     }
     formattedEndpoint = `${prefix}${endpoint}`;
   }
@@ -73,6 +76,7 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
     const response = await fetch(`${API_BASE_URL}${formattedEndpoint}`, {
       ...options,
       headers,
+      cache: 'no-store'
     });
 
     if (!response.ok) {
@@ -100,7 +104,10 @@ export const api = {
     login: (credentials: { email: string; password: string }) => 
       request('/auth/login', { method: 'POST', body: JSON.stringify(credentials) }),
     logout: () => request('/auth/logout', { method: 'POST' }),
+    autoLogout: () => request('/auth/auto-logout', { method: 'POST' }),
     getMe: () => request('/auth/me'),
+    requestPasswordReset: (email: string) =>
+      request('/auth/forgot-password-request', { method: 'POST', body: JSON.stringify({ email }) }),
     punch: (data: { action: 'in' | 'out'; device_info?: string; gps_latitude?: number; gps_longitude?: number }) =>
       request('/auth/punch', { method: 'POST', body: JSON.stringify(data) }),
     getAttendance: (paramsOrId?: number | {
@@ -108,6 +115,7 @@ export const api = {
       search?: string;
       role?: string;
       status?: string;
+      hospital_id?: string;
       startDate?: string;
       endDate?: string;
       lateOnly?: boolean;
@@ -127,8 +135,19 @@ export const api = {
       }
       return request(url);
     },
-    updateProfile: (data: { name?: string; phone?: string; password?: string }) =>
-      request('/auth/profile', { method: 'PUT', body: JSON.stringify(data) })
+    updateProfile: (data: {
+      name?: string;
+      phone?: string;
+      password?: string;
+      personal_email?: string;
+      age?: number | string;
+      date_of_birth?: string;
+      gender?: string;
+      about?: string;
+    }) =>
+      request('/auth/profile', { method: 'PUT', body: JSON.stringify(data) }),
+    uploadProfilePhoto: (formData: FormData) =>
+      request('/auth/profile/photo', { method: 'POST', body: formData })
   },
 
   // Dashboard API
@@ -137,19 +156,60 @@ export const api = {
     getCharts: () => request('/dashboard/charts'),
     getNotifications: () => request('/dashboard/notifications'),
     markNotificationRead: (id: number) => 
-      request(`/dashboard/notifications/${id}/read`, { method: 'PUT' })
+      request(`/dashboard/notifications/${id}/read`, { method: 'PUT' }),
+    markAllNotificationsRead: () =>
+      request('/dashboard/notifications/read-all', { method: 'PUT' })
   },
 
   // Appointments API
   appointments: {
-    getAll: () => request('/appointments'),
+    getAll: (params?: { start_date?: string; end_date?: string; page?: number | string; limit?: number | string }) => {
+      let url = '/appointments';
+      if (params) {
+        const queryParts = Object.entries(params)
+          .filter(([_, v]) => v !== undefined && v !== null && v !== '')
+          .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`);
+        if (queryParts.length > 0) {
+          url += `?${queryParts.join('&')}`;
+        }
+      }
+      return request(url);
+    },
+    getPaymentsReport: (params?: { 
+      start_date?: string; 
+      end_date?: string; 
+      hospital_id?: string;
+      search?: string;
+      status?: string;
+      doctor_id?: string | number;
+    }) => {
+      let url = '/appointments/payments-report';
+      if (params) {
+        const queryParts = Object.entries(params)
+          .filter(([_, v]) => v !== undefined && v !== null && v !== '')
+          .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`);
+        if (queryParts.length > 0) {
+          url += `?${queryParts.join('&')}`;
+        }
+      }
+      return request(url);
+    },
     getById: (id: number) => request(`/appointments/${id}`),
     create: (data: any) => request('/appointments', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: number, data: any) => request(`/appointments/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: number) => request(`/appointments/${id}`, { method: 'DELETE' }),
     restore: (id: number) => request(`/appointments/${id}/restore`, { method: 'PUT' }),
-    addPayment: (id: number, payment: { amount: number; payment_method: string; transaction_ref?: string; notes?: string }) =>
+    moveToTelecalling: (id: number, data: {
+      phone_number: string;
+      outreach_status: string;
+      callback_date?: string;
+      telecaller_id: number;
+      outbound_notes?: string;
+    }) => request(`/appointments/${id}/move-to-telecalling`, { method: 'PUT', body: JSON.stringify(data) }),
+    addPayment: (id: number, payment: { amount: number; payment_method: string; transaction_ref?: string; notes?: string; payment_splits?: any; upi_app?: string; payer_upi_id?: string }) =>
       request(`/appointments/${id}/payments`, { method: 'POST', body: JSON.stringify(payment) }),
+    updatePayment: (id: number, paymentId: number, payment: { transaction_ref: string; upi_app?: string; payer_upi_id?: string; payment_splits?: any }) =>
+      request(`/appointments/${id}/payments/${paymentId}`, { method: 'PUT', body: JSON.stringify(payment) }),
     getPayments: (id: number) => request(`/appointments/${id}/payments`),
     getHistory: (id: number) => request(`/appointments/${id}/history`),
     getPendingPayments: (params?: {
@@ -188,7 +248,11 @@ export const api = {
 
   // Go Visits API (Executives)
   visits: {
-    getAll: () => request('/visits'),
+    getAll: (params?: { type?: string }) => {
+      let url = '/visits';
+      if (params?.type) url += `?type=${params.type}`;
+      return request(url);
+    },
     getById: (id: number) => request(`/visits/${id}`),
     start: (formData: FormData) =>
       request('/visits/start', { method: 'POST', body: formData }),
@@ -198,6 +262,8 @@ export const api = {
       request(`/visits/${id}/end`, { method: 'POST', body: formData }),
     complete: (id: number, formData: FormData) =>
       request(`/visits/${id}/complete`, { method: 'POST', body: formData }),
+    updateNotes: (id: number, data: { notes: string; summary?: string }) =>
+      request(`/visits/${id}/notes`, { method: 'PUT', body: JSON.stringify(data) }),
     reopen: (id: number) => request(`/visits/${id}/reopen`, { method: 'POST' }),
     verify: (id: number) => request(`/visits/${id}/verify`, { method: 'PUT' }),
     cancel: (id: number) => request(`/visits/${id}`, { method: 'DELETE' })
@@ -227,11 +293,104 @@ export const api = {
   users: {
     getAll: () => request('/users'),
     getDoctors: () => request('/users/doctors'),
+    getDentists: () => request('/users/dentists'),
     getExecutives: () => request('/users/executives'),
     getTelecallers: () => request('/users/telecallers'),
+    getTechnicians: () => request('/users/technicians'),
     create: (data: any) => request('/users', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: number, data: any) => request(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: number) => request(`/users/${id}`, { method: 'DELETE' }),
     restore: (id: number) => request(`/users/${id}/restore`, { method: 'PUT' })
+  },
+  
+  // Therapies API
+  therapies: {
+    getAll: (params?: {
+      hospital_id?: string;
+      status?: string;
+      therapy_type?: string;
+      search?: string;
+      start_date?: string;
+      end_date?: string;
+      op_technician_id?: string;
+      sop_technician_id?: string;
+    }) => {
+      let url = '/therapies';
+      if (params) {
+        const queryParts = Object.entries(params)
+          .filter(([_, v]) => v !== undefined && v !== null && v !== '')
+          .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`);
+        if (queryParts.length > 0) {
+          url += `?${queryParts.join('&')}`;
+        }
+      }
+      return request(url);
+    },
+    getById: (id: number) => request(`/therapies/${id}`),
+    getTechnicians: () => request('/therapies/technicians'),
+    create: (data: any) => request('/therapies', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: number, data: any) => request(`/therapies/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    verify: (id: number, data: { verified: boolean; remarks?: string }) => 
+      request(`/therapies/${id}/verify`, { method: 'PUT', body: JSON.stringify(data) })
+  },
+  
+  // Reports API
+  reports: {
+    getDaily: (params?: {
+      startDate?: string;
+      endDate?: string;
+      role?: string;
+      userId?: string;
+      page?: number;
+      limit?: number;
+    }) => {
+      let url = '/reports/daily';
+      if (params) {
+        const queryParts = Object.entries(params)
+          .filter(([_, v]) => v !== undefined && v !== null && v !== '')
+          .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`);
+        if (queryParts.length > 0) {
+          url += `?${queryParts.join('&')}`;
+        }
+      }
+      return request(url);
+    }
+  },
+
+  // Field Appointments API
+  fieldAppointments: {
+    getAll: (params?: {
+      search?: string;
+      appointment_type?: string;
+      executive_id?: string | number;
+      start_date?: string;
+      end_date?: string;
+      status?: string;
+    }) => {
+      let url = '/field-appointments';
+      if (params) {
+        const queryParts = Object.entries(params)
+          .filter(([_, v]) => v !== undefined && v !== null && v !== '')
+          .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`);
+        if (queryParts.length > 0) {
+          url += `?${queryParts.join('&')}`;
+        }
+      }
+      return request(url);
+    },
+    create: (data: any) => request('/field-appointments', { method: 'POST', body: JSON.stringify(data) }),
+    updateStatus: (id: number, data: { status: string }) =>
+      request(`/field-appointments/${id}/status`, { method: 'PUT', body: JSON.stringify(data) }),
+    telecallerAction: (id: number, data: { status?: string; notes?: string; next_followup_date?: string }) =>
+      request(`/field-appointments/${id}/telecaller-action`, { method: 'PUT', body: JSON.stringify(data) }),
+    reassign: (data: { leadIds: number[]; telecallerId: number }) =>
+      request('/field-appointments/reassign', { method: 'PUT', body: JSON.stringify(data) }),
+    rebalance: () =>
+      request('/field-appointments/rebalance', { method: 'POST' }),
+    getPerformance: () =>
+      request('/field-appointments/telecaller-performance'),
+    getRedistributionLogs: () =>
+      request('/field-appointments/redistribution-logs')
   }
 };
+

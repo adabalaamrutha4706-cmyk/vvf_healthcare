@@ -35,9 +35,33 @@ const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCa
 };
 
 const maxFileSize = (parseInt(process.env.MAX_FILE_SIZE_MB || '5', 10)) * 1024 * 1024; // Default 5MB
-
 export const upload = multer({
   storage: storage,
+  fileFilter: fileFilter,
+  limits: {
+    fileSize: maxFileSize
+  }
+});
+
+const profileUploadDir = path.join(__dirname, '../../uploads/profiles');
+
+const profileStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    // Create directory if it doesn't exist
+    if (!fs.existsSync(profileUploadDir)) {
+      fs.mkdirSync(profileUploadDir, { recursive: true });
+    }
+    cb(null, profileUploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `profile-${uniqueSuffix}${ext}`);
+  }
+});
+
+export const uploadProfile = multer({
+  storage: profileStorage,
   fileFilter: fileFilter,
   limits: {
     fileSize: maxFileSize

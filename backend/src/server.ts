@@ -19,10 +19,11 @@ import leadRoutes from './routes/leadRoutes';
 import userRoutes from './routes/userRoutes';
 import dashboardRoutes from './routes/dashboardRoutes';
 import superadminRoutes from './routes/superadminRoutes';
+import therapyRoutes from './routes/therapyRoutes';
 
 // Imports role routers
 import adminRoutes from './routes/adminRoutes';
-import chiefDoctorRoutes from './routes/chiefDoctorRoutes';
+import dentalDoctorRoutes from './routes/dentalDoctorRoutes';
 import doctorRoutes from './routes/doctorRoutes';
 import executiveRoutes from './routes/executiveRoutes';
 import receptionRoutes from './routes/receptionRoutes';
@@ -72,9 +73,23 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/superadmin', superadminRoutes);
 
 // Role-based portals endpoints
+app.use('/api/admin/therapies', requireAuth, authorize(['Admin']), therapyRoutes);
+app.use('/api/op-technician/therapies', requireAuth, authorize(['OP Technician']), therapyRoutes);
+app.use('/api/sop-technician/therapies', requireAuth, authorize(['SOP Technician']), therapyRoutes);
+app.use('/api/op-technician/dashboard', requireAuth, authorize(['OP Technician']), dashboardRoutes);
+app.use('/api/sop-technician/dashboard', requireAuth, authorize(['SOP Technician']), dashboardRoutes);
+
+app.use('/api/op-technician/hospitals', requireAuth, authorize(['OP Technician']), hospitalRoutes);
+app.use('/api/op-technician/appointments', requireAuth, authorize(['OP Technician']), appointmentRoutes);
+app.use('/api/op-technician/users', requireAuth, authorize(['OP Technician']), userRoutes);
+
+app.use('/api/sop-technician/hospitals', requireAuth, authorize(['SOP Technician']), hospitalRoutes);
+app.use('/api/sop-technician/appointments', requireAuth, authorize(['SOP Technician']), appointmentRoutes);
+app.use('/api/sop-technician/users', requireAuth, authorize(['SOP Technician']), userRoutes);
+
 app.use('/api/admin', requireAuth, authorize(['Admin']), adminRoutes);
-app.use('/api/chief-doctor', requireAuth, authorize(['Chief Doctor']), chiefDoctorRoutes);
 app.use('/api/doctor', requireAuth, authorize(['Doctor']), doctorRoutes);
+app.use('/api/dental-doctor', requireAuth, authorize(['Dental Doctor']), dentalDoctorRoutes);
 app.use('/api/executive', requireAuth, authorize(['Executive']), executiveRoutes);
 app.use('/api/reception', requireAuth, authorize(['Reception']), receptionRoutes);
 app.use('/api/telecaller', requireAuth, authorize(['Telecaller']), telecallerRoutes);

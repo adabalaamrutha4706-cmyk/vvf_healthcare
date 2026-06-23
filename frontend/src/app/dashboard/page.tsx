@@ -2,18 +2,31 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { useRouter } from 'next/navigation';
 import { DashboardLayout } from '../../components/DashboardLayout';
 import { api } from '../../lib/api';
 import { 
   Calendar, CreditCard, Building2, MapPin, 
   ArrowRight, Users, PlusCircle, Activity, TrendingUp,
-  Map, Sparkles, UserCheck, ShieldAlert, Clock
+  Map, Sparkles, UserCheck, ShieldAlert, Clock, Settings, CalendarDays
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
+import { MyPerformanceWidget } from '../../components/MyPerformanceWidget';
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const router = useRouter();
+
+  // Redirect technicians to their role-specific dashboards
+  useEffect(() => {
+    if (!user) return;
+    if (user.role === 'OP Technician') {
+      router.replace('/op-technician/dashboard');
+    } else if (user.role === 'SOP Technician') {
+      router.replace('/sop-technician/dashboard');
+    }
+  }, [user, router]);
   const [stats, setStats] = useState<any>(null);
   const [charts, setCharts] = useState<any>(null);
   const [activities, setActivities] = useState<any[]>([]);
@@ -24,41 +37,59 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!user) return;
-    const fetchDashboardData = async () => {
+    const fetchDashboardData = async (silent = false) => {
       try {
         const statsRes = await api.dashboard.getStats();
         setStats(statsRes.stats);
         setActivities(statsRes.recentActivities || []);
         
-        try {
-          const chartsRes = await api.dashboard.getCharts();
-          setCharts(chartsRes);
-        } catch (err) {
-          console.error("Failed to load chart trends, using default visual mock:", err);
-        }
-
-        if (user?.role !== 'Reception') {
+        if (!silent) {
           try {
-            const visitsRes = await api.visits.getAll();
-            setVisits(visitsRes.visits || []);
+            const chartsRes = await api.dashboard.getCharts();
+            setCharts(chartsRes);
           } catch (err) {
-            console.error("Failed to load visits for map:", err);
+            console.error("Failed to load chart trends, using default visual mock:", err);
+          }
+
+          if (user?.role !== 'Reception') {
+            try {
+              const visitsRes = await api.visits.getAll();
+              setVisits(visitsRes.visits || []);
+            } catch (err) {
+              console.error("Failed to load visits for map:", err);
+            }
+          }
+
+          try {
+            const hospRes = await api.hospitals.getAll();
+            const uniqueHospitals: any[] = [];
+            const seenHospIds = new Set();
+            (hospRes.hospitals || hospRes || []).forEach((h: any) => {
+              if (h && h.id && !seenHospIds.has(h.id)) {
+                seenHospIds.add(h.id);
+                uniqueHospitals.push(h);
+              }
+            });
+            setHospitalsList(uniqueHospitals);
+          } catch (err) {
+            console.error("Failed to load hospitals list:", err);
           }
         }
-
-        try {
-          const hospRes = await api.hospitals.getAll();
-          setHospitalsList(hospRes.hospitals || hospRes || []);
-        } catch (err) {
-          console.error("Failed to load hospitals list:", err);
-        }
       } catch (err: any) {
-        setError(err.message || 'Failed to load system dashboard statistics.');
+        if (!silent) {
+          setError(err.message || 'Failed to load system dashboard statistics.');
+        }
       } finally {
-        setLoading(false);
+        if (!silent) {
+          setLoading(false);
+        }
       }
     };
     fetchDashboardData();
+    const interval = setInterval(() => {
+      fetchDashboardData(true);
+    }, 10000);
+    return () => clearInterval(interval);
   }, [user]);
 
   const formatCurrency = (val: number) => {
@@ -124,24 +155,330 @@ export default function Dashboard() {
   const maxRevenue = Math.max(...mockRevenueTrend.map((d: any) => d.revenue || 0), 10000);
   const maxVisits = Math.max(...mockVisitsTrend.map((d: any) => d.visits || 0), 10);
 
+  if (user?.role === 'Doctor' || user?.role === 'Dental Doctor') {
+    return (
+      <DashboardLayout>
+        <div className="space-y-4 sm:space-y-6 max-w-full min-w-0 mobile-contained">
+          {/* Header Block */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h1 className="text-base sm:text-lg font-bold text-slate-500 flex items-center gap-2 flex-wrap">
+                Welcome back, <span className="text-primary-green">{user?.name}</span>
+                <Sparkles className="h-5 w-5 text-primary-green animate-pulse" />
+              </h1>
+              <p className="text-sm text-slate-500 mt-1">
+                Here is your personalized clinician dashboard.
+              </p>
+            </div>
+          </div>
+
+          {error && (
+            <div className="p-4 rounded-xl bg-alert-bg border border-alert-border text-xs text-alert-text flex items-center gap-2">
+              <ShieldAlert className="h-4 w-4" />
+              {error}
+            </div>
+          )}
+
+          <MyPerformanceWidget performance={stats?.myPerformance} role={user?.role || ''} />
+
+          {/* Clinician Stats Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 max-w-full min-w-0">
+            {/* Card 1: Today's Appointments */}
+            <div className="relative group overflow-hidden rounded-xl bg-white border border-border-gray p-3 sm:p-5 transition-all duration-300 hover:border-primary-green/30 hover:shadow-sm max-w-full min-w-0 mobile-contained">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-primary-green/5 rounded-full blur-2xl pointer-events-none group-hover:bg-primary-green/10 transition-all duration-300" />
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Today's Appointments</p>
+                  <h3 className="text-2xl font-bold text-slate-500 mt-2">{stats?.todayAppointments || 0}</h3>
+                  <p className="text-[10px] text-slate-500 mt-1">Scheduled for today</p>
+                </div>
+                <div className="p-3 bg-very-light-green rounded-xl border border-light-green text-primary-green">
+                  <TrendingUp className="h-5 w-5" />
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Upcoming Appointments */}
+            <div className="relative group overflow-hidden rounded-xl bg-white border border-border-gray p-3 sm:p-5 transition-all duration-300 hover:border-primary-green/30 hover:shadow-sm max-w-full min-w-0 mobile-contained">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-primary-green/5 rounded-full blur-2xl pointer-events-none group-hover:bg-primary-green/10 transition-all duration-300" />
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Upcoming Appointments</p>
+                  <h3 className="text-2xl font-bold text-slate-500 mt-2">{stats?.upcomingAppointments || 0}</h3>
+                  <p className="text-[10px] text-slate-500 mt-1">Future scheduled checkups</p>
+                </div>
+                <div className="p-3 bg-very-light-green rounded-xl border border-light-green text-primary-green">
+                  <Clock className="h-5 w-5" />
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3: Completed Appointments */}
+            <div className="relative group overflow-hidden rounded-xl bg-white border border-border-gray p-3 sm:p-5 transition-all duration-300 hover:border-primary-green/30 hover:shadow-sm max-w-full min-w-0 mobile-contained">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-primary-green/5 rounded-full blur-2xl pointer-events-none group-hover:bg-primary-green/10 transition-all duration-300" />
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Completed Appointments</p>
+                  <h3 className="text-2xl font-bold text-slate-500 mt-2">{stats?.completedAppointments || 0}</h3>
+                  <p className="text-[10px] text-slate-500 mt-1">Consultations marked completed</p>
+                </div>
+                <div className="p-3 bg-very-light-green rounded-xl border border-light-green text-primary-green">
+                  <UserCheck className="h-5 w-5" />
+                </div>
+              </div>
+            </div>
+
+            {/* Card 4: Cancelled Appointments */}
+            <div className="relative group overflow-hidden rounded-xl bg-white border border-border-gray p-3 sm:p-5 transition-all duration-300 hover:border-alert-border/30 hover:shadow-sm max-w-full min-w-0 mobile-contained">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-alert-bg/5 rounded-full blur-2xl pointer-events-none group-hover:bg-alert-bg/10 transition-all duration-300" />
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Cancelled Appointments</p>
+                  <h3 className="text-2xl font-bold text-slate-500 mt-2">{stats?.cancelledAppointments || 0}</h3>
+                  <p className="text-[10px] text-slate-500 mt-1">Cancelled consultations</p>
+                </div>
+                <div className="p-3 bg-alert-bg rounded-xl border border-alert-border text-alert-text">
+                  <ShieldAlert className="h-5 w-5" />
+                </div>
+              </div>
+            </div>
+
+            {/* Card 5: Total Assigned Appointments */}
+            <div className="relative group overflow-hidden rounded-xl bg-white border border-border-gray p-3 sm:p-5 transition-all duration-300 hover:border-primary-green/30 hover:shadow-sm max-w-full min-w-0 mobile-contained">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-primary-green/5 rounded-full blur-2xl pointer-events-none group-hover:bg-primary-green/10 transition-all duration-300" />
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Assigned Appointments</p>
+                  <h3 className="text-2xl font-bold text-slate-500 mt-2">{stats?.totalAppointments || 0}</h3>
+                  <p className="text-[10px] text-slate-500 mt-1">Lifetime assigned consultations</p>
+                </div>
+                <div className="p-3 bg-very-light-green rounded-xl border border-light-green text-primary-green">
+                  <Calendar className="h-5 w-5" />
+                </div>
+              </div>
+            </div>
+
+            {/* Card 6: Attendance Summary */}
+            <div className="relative group overflow-hidden rounded-xl bg-white border border-border-gray p-3 sm:p-5 transition-all duration-300 hover:border-primary-green/30 hover:shadow-sm max-w-full min-w-0 mobile-contained">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-primary-green/5 rounded-full blur-2xl pointer-events-none group-hover:bg-primary-green/10 transition-all duration-300" />
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Attendance Summary</p>
+                  <h3 className="text-2xl font-bold text-slate-500 mt-2">
+                    {stats?.attendanceSummary?.completedDays || 0} <span className="text-sm font-medium text-slate-400">Days</span>
+                  </h3>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Total Hours Worked: {stats?.attendanceSummary?.totalHours || 0} hrs
+                  </p>
+                </div>
+                <div className="p-3 bg-very-light-green rounded-xl border border-light-green text-primary-green">
+                  <Clock className="h-5 w-5" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (user?.role === 'Executive') {
+    const fieldStats = stats?.fieldAppointmentStats || {
+      totalSubmitted: 0,
+      todaySubmitted: 0,
+      monthlySubmitted: 0,
+      convertedCount: 0
+    };
+
+    return (
+      <DashboardLayout>
+        <div className="space-y-4 sm:space-y-6 max-w-full min-w-0 mobile-contained">
+          {/* Header Block */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h1 className="text-base sm:text-lg font-bold text-slate-500 flex items-center gap-2 flex-wrap">
+                Welcome back, <span className="text-primary-green">{user?.name}</span>
+                <Sparkles className="h-5 w-5 text-primary-green animate-pulse" />
+              </h1>
+              <p className="text-sm text-slate-500 mt-1">
+                Here is your field executive performance and lead metrics overview.
+              </p>
+            </div>
+            
+            <div className="flex flex-wrap gap-2">
+              <Link 
+                id="quick-add-field-lead"
+                href="/field-appointments"
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-primary-green hover:bg-primary-green-hover rounded-xl transition-all shadow-sm"
+              >
+                <PlusCircle className="h-4 w-4" />
+                New Field Lead
+              </Link>
+            </div>
+          </div>
+
+          {error && (
+            <div className="p-4 rounded-xl bg-alert-bg border border-alert-border text-xs text-alert-text flex items-center gap-2">
+              <ShieldAlert className="h-4 w-4" />
+              {error}
+            </div>
+          )}
+
+          <MyPerformanceWidget performance={stats?.myPerformance} role={user?.role || ''} />
+
+          {/* Field Lead Stats Cards Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 max-w-full min-w-0">
+            {/* Card 1: Total Field Appointments Submitted */}
+            <div className="relative group overflow-hidden rounded-xl bg-white border border-border-gray p-3 sm:p-5 transition-all duration-300 hover:border-primary-green/30 hover:shadow-sm">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-primary-green/5 rounded-full blur-2xl pointer-events-none" />
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Submissions</p>
+                  <h3 className="text-2xl font-bold text-slate-700 mt-2">{fieldStats.totalSubmitted}</h3>
+                  <p className="text-[10px] text-slate-400 mt-1">Total leads registered</p>
+                </div>
+                <div className="p-3 bg-very-light-green rounded-xl border border-light-green text-primary-green">
+                  <Calendar className="h-5 w-5" />
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: Today's Submissions */}
+            <div className="relative group overflow-hidden rounded-xl bg-white border border-border-gray p-3 sm:p-5 transition-all duration-300 hover:border-primary-green/30 hover:shadow-sm">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-primary-green/5 rounded-full blur-2xl pointer-events-none" />
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Today's Submissions</p>
+                  <h3 className="text-2xl font-bold text-slate-700 mt-2">{fieldStats.todaySubmitted}</h3>
+                  <p className="text-[10px] text-slate-400 mt-1">Leads filed today</p>
+                </div>
+                <div className="p-3 bg-very-light-green rounded-xl border border-light-green text-primary-green">
+                  <Sparkles className="h-5 w-5 animate-pulse" />
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3: This Month's Submissions */}
+            <div className="relative group overflow-hidden rounded-xl bg-white border border-border-gray p-3 sm:p-5 transition-all duration-300 hover:border-primary-green/30 hover:shadow-sm">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-primary-green/5 rounded-full blur-2xl pointer-events-none" />
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">This Month's Submissions</p>
+                  <h3 className="text-2xl font-bold text-slate-700 mt-2">{fieldStats.monthlySubmitted}</h3>
+                  <p className="text-[10px] text-slate-400 mt-1">Registered this calendar month</p>
+                </div>
+                <div className="p-3 bg-very-light-green rounded-xl border border-light-green text-primary-green">
+                  <TrendingUp className="h-5 w-5" />
+                </div>
+              </div>
+            </div>
+
+            {/* Card 4: Conversion Count */}
+            <div className="relative group overflow-hidden rounded-xl bg-white border border-border-gray p-3 sm:p-5 transition-all duration-300 hover:border-primary-green/30 hover:shadow-sm">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-primary-green/5 rounded-full blur-2xl pointer-events-none" />
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Conversions</p>
+                  <h3 className="text-2xl font-bold text-slate-700 mt-2">{fieldStats.convertedCount}</h3>
+                  <p className="text-[10px] text-slate-400 mt-1">Leads converted successfully</p>
+                </div>
+                <div className="p-3 bg-very-light-green rounded-xl border border-light-green text-primary-green">
+                  <UserCheck className="h-5 w-5" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Visits trend SVG + map log */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+            <div className="bg-white border border-border-gray rounded-xl p-3 sm:p-5 shadow-sm overflow-hidden col-span-1 lg:col-span-2">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-500">Your Field Visit Trend</h3>
+                  <p className="text-[10px] text-slate-400 font-medium">Logged visits over last 7 days</p>
+                </div>
+              </div>
+              
+              <div className="relative h-44 w-full flex items-end">
+                <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                  <path
+                    d={`M 0 100 L ${mockVisitsTrend.map((d: any, idx: number) => {
+                      const x = (idx / (mockVisitsTrend.length - 1)) * 100;
+                      const y = 90 - ((d.visits || 0) / maxVisits) * 75;
+                      return `${x} ${y}`;
+                    }).join(' L ')} L 100 100 Z`}
+                    fill="url(#blue-area-gradient-exec)"
+                    opacity="0.1"
+                  />
+                  <path
+                    d={`M ${mockVisitsTrend.map((d: any, idx: number) => {
+                      const x = (idx / (mockVisitsTrend.length - 1)) * 100;
+                      const y = 90 - ((d.visits || 0) / maxVisits) * 75;
+                      return `${x} ${y}`;
+                    }).join(' L ')}`}
+                    fill="none"
+                    stroke="#3b82f6"
+                    strokeWidth="2"
+                  />
+                  <defs>
+                    <linearGradient id="blue-area-gradient-exec" x1="0%" y1="0%" x2="0%" y2="100%">
+                      <stop offset="0%" stopColor="#3b82f6" />
+                      <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+              </div>
+              
+              <div className="grid grid-cols-7 gap-0.5 mt-4 border-t border-border-gray pt-3">
+                {mockVisitsTrend.map((d: any, idx: number) => (
+                  <div key={idx} className="flex flex-col items-center">
+                    <span className="text-[8px] sm:text-[10px] text-slate-550 font-bold">{d.date}</span>
+                    <span className="text-xs text-slate-700 font-bold">{d.visits || 0}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* List of recent submissions */}
+            <div className="bg-white border border-border-gray rounded-xl p-3 sm:p-5 shadow-sm flex flex-col h-[300px] sm:h-[380px] col-span-1">
+              <h3 className="text-sm font-bold text-slate-500 mb-3">Recent Activity</h3>
+              <div className="flex-1 overflow-y-auto divide-y divide-border-gray border border-border-gray rounded-xl bg-slate-50/20">
+                {activities.length === 0 ? (
+                  <p className="text-center py-10 text-xs text-slate-400">No recent activity logs.</p>
+                ) : (
+                  activities.map((act) => (
+                    <div key={act.id} className="p-3 text-xs leading-normal">
+                      <p className="font-semibold text-slate-800">{act.description}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">{new Date(act.created_at).toLocaleDateString()}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
       <div className="space-y-4 sm:space-y-6 max-w-full min-w-0 mobile-contained">
         {/* Header Block */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2 flex-wrap">
+            <h1 className="text-base sm:text-lg font-bold text-slate-500 flex items-center gap-2 flex-wrap">
               Welcome back, <span className="text-primary-green">{user?.name}</span>
               <Sparkles className="h-5 w-5 text-primary-green animate-pulse" />
             </h1>
-            <p className="text-sm text-secondary-text mt-1">
+            <p className="text-sm text-slate-500 mt-1">
               Here is your overview of the Venkateswara Vascular Foundation operations network.
             </p>
           </div>
           
           {/* Action pill/shortcuts based on user roles */}
           <div className="flex flex-wrap gap-2">
-            {['Admin', 'Reception', 'Chief Doctor'].includes(user?.role || '') && (
+            {['Admin', 'Reception'].includes(user?.role || '') && (
               <Link 
                 id="quick-add-appointment"
                 href="/appointments?new=true"
@@ -171,22 +508,184 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* 4 Core Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 max-w-full min-w-0">
-          {/* Card 1: Total Appointments */}
-          <div className={`relative group overflow-hidden rounded-xl bg-white border border-border-gray p-3 sm:p-5 transition-all duration-300 hover:border-primary-green/30 hover:shadow-sm max-w-full min-w-0 mobile-contained ${user?.role === 'Reception' ? 'sm:col-span-2 lg:col-span-2' : !['Admin', 'Superadmin', 'Doctor'].includes(user?.role || '') ? 'sm:col-span-2 lg:col-span-2' : ''}`}>
-            <div className="absolute top-0 right-0 w-24 h-24 bg-primary-green/5 rounded-full blur-2xl pointer-events-none group-hover:bg-primary-green/10 transition-all duration-300" />
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-secondary-text">Total Appointments</p>
-                <h3 className="text-2xl font-bold text-slate-900 mt-2">{stats?.totalAppointments || 0}</h3>
-                <div className="flex items-center gap-1 text-[10px] text-primary-green mt-1">
-                  <TrendingUp className="h-3 w-3" />
-                  <span>{stats?.todayAppointments || 0} Scheduled Today</span>
+        <MyPerformanceWidget performance={stats?.myPerformance} role={user?.role || ''} />
+
+        {/* Admin Field Lead Metrics Section */}
+        {['Admin', 'Superadmin'].includes(user?.role || '') && stats?.fieldAppointmentStats && (
+          <div className="bg-white border border-border-gray rounded-2xl p-5 shadow-sm space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+              <CalendarDays className="h-5 w-5 text-primary-green" />
+              <h3 className="text-sm font-extrabold text-slate-500 uppercase tracking-wider">Field Leads Operations Network</h3>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Total Field Leads */}
+              <div className="bg-slate-50 border border-slate-200/50 rounded-xl p-4 flex flex-col justify-between">
+                <div>
+                  <span className="text-[9px] font-bold text-slate-400 block uppercase tracking-wider">Total Field Leads</span>
+                  <span className="text-3xl font-extrabold text-slate-700 block mt-1.5">{stats.fieldAppointmentStats.total}</span>
+                </div>
+                <span className="text-[10px] text-slate-405 font-medium">All registered patients from field</span>
+              </div>
+
+              {/* Requirement Type breakdown */}
+              <div className="bg-slate-50 border border-slate-200/50 rounded-xl p-4 space-y-2">
+                <span className="text-[9px] font-bold text-slate-400 block uppercase tracking-wider">Leads By Requirement</span>
+                <div className="text-[11px] font-semibold text-slate-500 space-y-1 mt-1">
+                  <div className="flex justify-between">
+                    <span>Doctor Consult:</span>
+                    <span className="font-extrabold">{stats.fieldAppointmentStats.byType?.doctor || 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Dental Consult:</span>
+                    <span className="font-extrabold">{stats.fieldAppointmentStats.byType?.dental || 0}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Therapy Services:</span>
+                    <span className="font-extrabold">{stats.fieldAppointmentStats.byType?.therapy || 0}</span>
+                  </div>
                 </div>
               </div>
-              <div className="p-3 bg-very-light-green rounded-xl border border-light-green text-primary-green">
-                <Calendar className="h-5 w-5" />
+
+              {/* Top Performing Executives */}
+              <div className="bg-slate-50 border border-slate-200/50 rounded-xl p-4 space-y-1">
+                <span className="text-[9px] font-bold text-slate-400 block uppercase tracking-wider">Top Field Performers</span>
+                <div className="text-[11px] font-semibold text-slate-500 space-y-1 mt-1">
+                  {stats.fieldAppointmentStats.topExecutives?.length === 0 ? (
+                    <span className="text-slate-400 italic">No registrations</span>
+                  ) : (
+                    stats.fieldAppointmentStats.topExecutives.slice(0, 3).map((exec: any, idx: number) => (
+                      <div key={exec.executive_id || idx} className="flex justify-between">
+                        <span className="truncate max-w-[120px]">{idx+1}. {exec.executive_name}</span>
+                        <span className="font-extrabold">{exec.count} leads</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Conversion Statistics */}
+              <div className="bg-slate-50 border border-slate-200/50 rounded-xl p-4 flex flex-col justify-between">
+                <div>
+                  <span className="text-[9px] font-bold text-slate-400 block uppercase tracking-wider">Lead Conversion Rate</span>
+                  {(() => {
+                    const total = stats.fieldAppointmentStats.total || 0;
+                    const converted = stats.fieldAppointmentStats.conversion?.find((c: any) => c.status === 'Converted')?.count || 0;
+                    const rate = total > 0 ? ((converted / total) * 100).toFixed(1) : '0.0';
+                    return (
+                      <>
+                        <span className="text-3xl font-extrabold text-slate-700 block mt-1.5">{rate}%</span>
+                        <span className="text-[10px] text-slate-405 font-bold block mt-1">{converted} out of {total} converted</span>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 4 Core Stats Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 max-w-full min-w-0">
+          {/* Card 1: Categorized Appointments Overview */}
+          <div className="sm:col-span-2 lg:col-span-4 bg-white border border-border-gray p-4 sm:p-5 rounded-2xl shadow-sm relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-primary-green/5 rounded-full blur-3xl pointer-events-none" />
+            <div className="flex items-center justify-between mb-4 border-b border-border-gray pb-3">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-primary-green" />
+                <h3 className="text-sm font-extrabold text-slate-500 uppercase tracking-wider">Appointments Overview</h3>
+              </div>
+              <span className="text-[10px] font-bold bg-very-light-green/80 text-primary-green border border-light-green/45 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                Today's Scheduled: {stats?.todayAppointments || 0} Total
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Doctor Appointments */}
+              <div className="p-4 rounded-xl bg-slate-50/50 border border-border-gray/70 hover:border-emerald-500/30 transition-all relative overflow-hidden group">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-emerald-500/10 transition-all" />
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="p-2 bg-emerald-50 text-primary-green rounded-lg border border-emerald-500/10">
+                    <TrendingUp className="h-4 w-4" />
+                  </div>
+                  <h4 className="font-bold text-xs text-slate-500 uppercase tracking-wider">Doctor Appointments</h4>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="bg-white border border-border-gray/50 rounded-lg p-2">
+                    <span className="text-[9px] font-bold text-slate-400 block uppercase">Today</span>
+                    <span className="text-base font-extrabold text-slate-500">{stats?.categoryStats?.doctor?.today || 0}</span>
+                  </div>
+                  <div className="bg-white border border-border-gray/50 rounded-lg p-2">
+                    <span className="text-[9px] font-bold text-slate-400 block uppercase">Upcoming</span>
+                    <span className="text-base font-extrabold text-slate-500">{stats?.categoryStats?.doctor?.upcoming || 0}</span>
+                  </div>
+                  <div className="bg-white border border-border-gray/50 rounded-lg p-2">
+                    <span className="text-[9px] font-bold text-slate-400 block uppercase">Completed</span>
+                    <span className="text-base font-extrabold text-primary-green">{stats?.categoryStats?.doctor?.completed || 0}</span>
+                  </div>
+                  <div className="bg-white border border-border-gray/50 rounded-lg p-2">
+                    <span className="text-[9px] font-bold text-slate-400 block uppercase">Cancelled</span>
+                    <span className="text-base font-extrabold text-alert-text">{stats?.categoryStats?.doctor?.cancelled || 0}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dental Appointments */}
+              <div className="p-4 rounded-xl bg-slate-50/50 border border-border-gray/70 hover:border-blue-500/30 transition-all relative overflow-hidden group">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-blue-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-blue-500/10 transition-all" />
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="p-2 bg-blue-50 text-blue-600 rounded-lg border border-blue-500/10">
+                    <Activity className="h-4 w-4" />
+                  </div>
+                  <h4 className="font-bold text-xs text-slate-500 uppercase tracking-wider">Dental Appointments</h4>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="bg-white border border-border-gray/50 rounded-lg p-2">
+                    <span className="text-[9px] font-bold text-slate-400 block uppercase">Today</span>
+                    <span className="text-base font-extrabold text-slate-500">{stats?.categoryStats?.dental?.today || 0}</span>
+                  </div>
+                  <div className="bg-white border border-border-gray/50 rounded-lg p-2">
+                    <span className="text-[9px] font-bold text-slate-400 block uppercase">Upcoming</span>
+                    <span className="text-base font-extrabold text-slate-500">{stats?.categoryStats?.dental?.upcoming || 0}</span>
+                  </div>
+                  <div className="bg-white border border-border-gray/50 rounded-lg p-2">
+                    <span className="text-[9px] font-bold text-slate-400 block uppercase">Completed</span>
+                    <span className="text-base font-extrabold text-blue-600">{stats?.categoryStats?.dental?.completed || 0}</span>
+                  </div>
+                  <div className="bg-white border border-border-gray/50 rounded-lg p-2">
+                    <span className="text-[9px] font-bold text-slate-400 block uppercase">Cancelled</span>
+                    <span className="text-base font-extrabold text-alert-text">{stats?.categoryStats?.dental?.cancelled || 0}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Services Appointments */}
+              <div className="p-4 rounded-xl bg-slate-50/50 border border-border-gray/70 hover:border-amber-500/30 transition-all relative overflow-hidden group">
+                <div className="absolute top-0 right-0 w-16 h-16 bg-amber-500/5 rounded-full blur-xl pointer-events-none group-hover:bg-amber-500/10 transition-all" />
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="p-2 bg-amber-50 text-amber-600 rounded-lg border border-amber-500/10">
+                    <Settings className="h-4 w-4" />
+                  </div>
+                  <h4 className="font-bold text-xs text-slate-500 uppercase tracking-wider">Services Appointments</h4>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="bg-white border border-border-gray/50 rounded-lg p-2">
+                    <span className="text-[9px] font-bold text-slate-400 block uppercase">Today</span>
+                    <span className="text-base font-extrabold text-slate-500">{stats?.categoryStats?.services?.today || 0}</span>
+                  </div>
+                  <div className="bg-white border border-border-gray/50 rounded-lg p-2">
+                    <span className="text-[9px] font-bold text-slate-400 block uppercase">Upcoming</span>
+                    <span className="text-base font-extrabold text-slate-500">{stats?.categoryStats?.services?.upcoming || 0}</span>
+                  </div>
+                  <div className="bg-white border border-border-gray/50 rounded-lg p-2">
+                    <span className="text-[9px] font-bold text-slate-400 block uppercase">Completed</span>
+                    <span className="text-base font-extrabold text-amber-600">{stats?.categoryStats?.services?.completed || 0}</span>
+                  </div>
+                  <div className="bg-white border border-border-gray/50 rounded-lg p-2">
+                    <span className="text-[9px] font-bold text-slate-400 block uppercase">Cancelled</span>
+                    <span className="text-base font-extrabold text-alert-text">{stats?.categoryStats?.services?.cancelled || 0}</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -197,8 +696,8 @@ export default function Dashboard() {
               <div className="absolute top-0 right-0 w-24 h-24 bg-alert-bg/5 rounded-full blur-2xl pointer-events-none group-hover:bg-alert-bg/10 transition-all duration-300" />
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-secondary-text">Pending Payments</p>
-                  <h3 className="text-2xl font-bold text-slate-900 mt-2">{formatCurrency(stats?.pendingPayments || 0)}</h3>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Pending Payments</p>
+                  <h3 className="text-2xl font-bold text-slate-500 mt-2">{formatCurrency(stats?.pendingPayments || 0)}</h3>
                   <div className="flex items-center gap-1 text-[10px] text-alert-text mt-1">
                     <Clock className="h-3.5 w-3.5 text-alert-text animate-pulse" />
                     <span>{stats?.pendingPaymentsCount || 0} Invoices Outstanding</span>
@@ -217,8 +716,8 @@ export default function Dashboard() {
               <div className="absolute top-0 right-0 w-24 h-24 bg-primary-green/5 rounded-full blur-2xl pointer-events-none group-hover:bg-primary-green/10 transition-all duration-300" />
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-secondary-text">Field Exec Visits</p>
-                  <h3 className="text-2xl font-bold text-slate-900 mt-2">{stats?.totalVisits || 0}</h3>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Field Exec Visits</p>
+                  <h3 className="text-2xl font-bold text-slate-500 mt-2">{stats?.totalVisits || 0}</h3>
                   <div className="flex items-center gap-1 text-[10px] text-primary-green mt-1">
                     <Activity className="h-3 w-3 animate-pulse" />
                     <span>
@@ -240,14 +739,30 @@ export default function Dashboard() {
               <div className="absolute top-0 right-0 w-24 h-24 bg-primary-green/5 rounded-full blur-2xl pointer-events-none group-hover:bg-primary-green/10 transition-all duration-300" />
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-secondary-text">Revenue Realized</p>
-                  <h3 className="text-2xl font-bold text-slate-900 mt-2">{formatCurrency(stats?.revenue || 0)}</h3>
-                  <p className="text-[10px] text-secondary-text mt-1">Cash & Digital Receipts</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Revenue Realized</p>
+                  <h3 className="text-2xl font-bold text-slate-500 mt-2">{formatCurrency(stats?.revenue || 0)}</h3>
+                  <p className="text-[10px] text-slate-500 mt-1">Cash & Digital Receipts</p>
                 </div>
                 <div className="p-3 bg-very-light-green rounded-xl border border-light-green text-primary-green">
                   <CreditCard className="h-5 w-5" />
                 </div>
               </div>
+              {stats?.revenueBreakdown && (
+                <div className="mt-3.5 pt-3 border-t border-border-gray/50 grid grid-cols-3 gap-1.5 text-[10px] font-semibold text-slate-550">
+                  <div>
+                    <span className="block text-slate-400 uppercase tracking-wider text-[8px]">Cash</span>
+                    <span className="font-bold text-slate-700">₹{(stats.revenueBreakdown.cash || 0).toLocaleString('en-IN')}</span>
+                  </div>
+                  <div>
+                    <span className="block text-slate-400 uppercase tracking-wider text-[8px]">UPI</span>
+                    <span className="font-bold text-slate-700">₹{(stats.revenueBreakdown.upi || 0).toLocaleString('en-IN')}</span>
+                  </div>
+                  <div>
+                    <span className="block text-slate-400 uppercase tracking-wider text-[8px]">Card</span>
+                    <span className="font-bold text-slate-700">₹{(stats.revenueBreakdown.card || 0).toLocaleString('en-IN')}</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -257,9 +772,9 @@ export default function Dashboard() {
               <div className="absolute top-0 right-0 w-24 h-24 bg-alert-bg/5 rounded-full blur-2xl pointer-events-none group-hover:bg-alert-bg/10 transition-all duration-300" />
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-secondary-text">Pending Outstandings</p>
-                  <h3 className="text-2xl font-bold text-slate-900 mt-2">{formatCurrency(stats?.pendingPayments || 0)}</h3>
-                  <p className="text-[10px] text-secondary-text mt-1">Due from Partial Payments</p>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Pending Outstandings</p>
+                  <h3 className="text-2xl font-bold text-slate-500 mt-2">{formatCurrency(stats?.pendingPayments || 0)}</h3>
+                  <p className="text-[10px] text-slate-500 mt-1">Due from Partial Payments</p>
                 </div>
                 <div className="p-3 bg-very-light-green rounded-xl border border-light-green text-primary-green">
                   <Building2 className="h-5 w-5" />
@@ -276,8 +791,8 @@ export default function Dashboard() {
           <div className={`bg-white border border-border-gray rounded-xl p-3 sm:p-5 shadow-sm overflow-hidden max-w-full min-w-0 mobile-contained ${user?.role === 'Reception' ? 'md:col-span-2 lg:col-span-3' : !['Admin', 'Superadmin', 'Doctor'].includes(user?.role || '') ? 'md:col-span-2 lg:col-span-2' : 'col-span-1 md:col-span-2 lg:col-span-2'}`}>
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h3 className="text-sm font-bold text-slate-900">Appointment Trends</h3>
-                <p className="text-[10px] text-secondary-text">Weekly patient visits frequency</p>
+                <h3 className="text-sm font-bold text-slate-500">Appointment Trends</h3>
+                <p className="text-[10px] text-slate-500">Weekly patient visits frequency</p>
               </div>
               <span className="text-[10px] bg-secondary-bg border border-border-gray px-2 py-1 rounded text-primary-green font-bold uppercase">7 Days</span>
             </div>
@@ -327,20 +842,20 @@ export default function Dashboard() {
             <div className="grid grid-cols-7 gap-0.5 mt-4 border-t border-border-gray pt-3 max-w-full min-w-0">
               {mockAppointmentsTrend.map((d: any, idx: number) => (
                 <div key={idx} className="flex flex-col items-center min-w-0">
-                  <span className="text-[8px] sm:text-[10px] text-secondary-text font-semibold truncate w-full text-center">{d.date}</span>
-                  <span className="text-[11px] text-secondary-text font-bold mt-0.5">{d.appointments || 0}</span>
+                  <span className="text-[8px] sm:text-[10px] text-slate-500 font-semibold truncate w-full text-center">{d.date}</span>
+                  <span className="text-[11px] text-slate-500 font-bold mt-0.5">{d.appointments || 0}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* SVG Revenue Bar Chart (Hidden from Chief Doctor, Reception, Telecaller, Executive) */}
-          {['Admin', 'Superadmin', 'Doctor'].includes(user?.role || '') && (
+          {/* SVG Revenue Bar Chart (Hidden from Reception, Telecaller, Executive) */}
+          {['Admin', 'Superadmin', 'Doctor', 'Dental Doctor'].includes(user?.role || '') && (
             <div className="bg-white border border-border-gray rounded-xl p-3 sm:p-5 shadow-sm overflow-hidden max-w-full min-w-0 mobile-contained">
               <div className="flex justify-between items-center mb-6">
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">Revenue Collections</h3>
-                  <p className="text-[10px] text-secondary-text">Digital and Cash receipts realization</p>
+                  <h3 className="text-sm font-bold text-slate-500">Revenue Collections</h3>
+                  <p className="text-[10px] text-slate-500">Digital and Cash receipts realization</p>
                 </div>
                 <span className="text-[10px] bg-secondary-bg border border-border-gray px-2 py-1 rounded text-primary-green font-bold uppercase">₹ INR</span>
               </div>
@@ -350,20 +865,20 @@ export default function Dashboard() {
                   const heightPct = ((d.revenue || 0) / maxRevenue) * 90;
                   return (
                     <div key={idx} className="flex-1 flex flex-col items-center h-full justify-end group cursor-pointer">
-                      <span className="text-[8px] text-secondary-text opacity-0 group-hover:opacity-100 transition-opacity font-bold mb-1">
+                      <span className="text-[8px] text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity font-bold mb-1">
                         {Math.round(d.revenue / 1000)}k
                       </span>
                       <div 
                         style={{ height: `${Math.max(heightPct, 4)}%` }}
                         className="w-full bg-gradient-to-t from-emerald-600 to-cyan-500 rounded-t-lg group-hover:from-emerald-500 group-hover:to-cyan-400 transition-all duration-300 relative shadow-md shadow-emerald-950/20"
                       />
-                      <span className="text-[10px] text-secondary-text font-semibold mt-2.5">{d.date}</span>
+                      <span className="text-[10px] text-slate-500 font-semibold mt-2.5">{d.date}</span>
                     </div>
                   );
                 })}
               </div>
               
-              <div className="flex justify-center items-center gap-4 mt-4 border-t border-border-gray pt-3 text-[10px] text-secondary-text">
+              <div className="flex justify-center items-center gap-4 mt-4 border-t border-border-gray pt-3 text-[10px] text-slate-500">
                 <div className="flex items-center gap-1.5">
                   <div className="h-2 w-2 rounded bg-emerald-500" />
                   <span>Cleared Payments</span>
@@ -377,10 +892,10 @@ export default function Dashboard() {
             <div className={`bg-white border border-border-gray rounded-xl p-3 sm:p-5 shadow-sm overflow-hidden max-w-full min-w-0 mobile-contained ${!['Admin', 'Superadmin', 'Doctor'].includes(user?.role || '') ? 'col-span-1' : 'col-span-1 md:col-span-2 lg:col-span-1'}`}>
               <div className="flex justify-between items-center mb-6">
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">Executive Activity</h3>
-                  <p className="text-[10px] text-secondary-text">Field visits logging volume</p>
+                  <h3 className="text-sm font-bold text-slate-500">Executive Activity</h3>
+                  <p className="text-[10px] text-slate-500">Field visits logging volume</p>
                 </div>
-                <span className="text-[10px] bg-slate-50 border border-slate-200 px-2 py-1 rounded text-primary-green font-bold uppercase">Visits</span>
+                <span className="text-[10px] bg-slate-50 border text-slate-500 px-2 py-1 rounded text-primary-green font-bold uppercase">Visits</span>
               </div>
 
               <div className="relative h-44 w-full max-w-full flex items-end overflow-hidden">
@@ -421,8 +936,8 @@ export default function Dashboard() {
               <div className="grid grid-cols-7 gap-0.5 mt-4 border-t border-border-gray pt-3 max-w-full min-w-0">
                 {mockVisitsTrend.map((d: any, idx: number) => (
                   <div key={idx} className="flex flex-col items-center min-w-0">
-                    <span className="text-[8px] sm:text-[10px] text-secondary-text font-semibold truncate w-full text-center">{d.date}</span>
-                    <span className="text-[11px] text-secondary-text font-bold mt-0.5">{d.visits || 0}</span>
+                    <span className="text-[8px] sm:text-[10px] text-slate-500 font-semibold truncate w-full text-center">{d.date}</span>
+                    <span className="text-[11px] text-slate-500 font-bold mt-0.5">{d.visits || 0}</span>
                   </div>
                 ))}
               </div>
@@ -443,7 +958,7 @@ export default function Dashboard() {
                   <div className="flex justify-between items-start gap-2">
                     <div>
                       <p className="text-xs font-bold text-slate-800">{alert.executive_name || `Executive #${alert.executive_id}`}</p>
-                      <p className="text-[10px] text-secondary-text">Checked in to: {alert.hospital_name}</p>
+                      <p className="text-[10px] text-slate-500">Checked in to: {alert.hospital_name}</p>
                     </div>
                     <span className="text-[9px] bg-alert-bg text-alert-text border border-alert-border px-2 py-0.5 rounded font-bold uppercase shrink-0">
                       Mismatch: {Math.round(alert.distance_from_hospital_meters)}m
@@ -465,11 +980,11 @@ export default function Dashboard() {
             <div className="lg:col-span-1 bg-white border border-border-gray rounded-xl p-3 sm:p-5 flex flex-col h-[300px] sm:h-[380px] shadow-sm overflow-hidden max-w-full min-w-0 mobile-contained">
               <div className="flex justify-between items-center mb-4">
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+                  <h3 className="text-sm font-bold text-slate-500 flex items-center gap-1.5">
                     <Map className="h-4.5 w-4.5 text-primary-green" />
                     Executive Live GPS Map
                   </h3>
-                  <p className="text-[10px] text-secondary-text">Registered hospitals (red) & Live check-ins (green)</p>
+                  <p className="text-[10px] text-slate-500">Registered hospitals (red) & Live check-ins (green)</p>
                 </div>
               </div>
 
@@ -513,11 +1028,11 @@ export default function Dashboard() {
                           <p className="font-bold uppercase tracking-wide text-red-800">
                             Hospital Registry
                           </p>
-                          <p className="text-slate-900 font-bold">{h.name}</p>
+                          <p className="text-slate-500 font-bold">{h.name}</p>
                           {h.hospital_uid && (
                             <p className="text-primary-green font-bold text-[8px]">{h.hospital_uid}</p>
                           )}
-                          <p className="text-secondary-text mt-0.5">{h.city}, {h.state}</p>
+                          <p className="text-slate-500 mt-0.5">{h.city}, {h.state}</p>
                           <p className="text-slate-400 mt-0.5 text-[8px]">
                             Lat: {h.latitude?.toFixed(5)}, Lng: {h.longitude?.toFixed(5)}
                           </p>
@@ -541,8 +1056,8 @@ export default function Dashboard() {
                           <p className="font-bold uppercase tracking-wide text-primary-green">
                             Active Check-in
                           </p>
-                          <p className="text-slate-900 font-semibold">{v.executive_name || `Exec #${v.executive_id}`}</p>
-                          <p className="text-secondary-text text-[10px]">At: {v.hospital_name}</p>
+                          <p className="text-slate-500 font-semibold">{v.executive_name || `Exec #${v.executive_id}`}</p>
+                          <p className="text-slate-500 text-[10px]">At: {v.hospital_name}</p>
                           <p className="text-slate-400 text-[8px] mt-0.5">
                             Lat: {v.gps_lat?.toFixed(5)}, Lng: {v.gps_lng?.toFixed(5)}
                           </p>
@@ -558,7 +1073,7 @@ export default function Dashboard() {
                         <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-border-gray shadow-md cursor-pointer" />
                         <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute bottom-6 left-1/2 -translate-x-1/2 bg-white border border-border-gray text-[9px] text-slate-800 px-2 py-1.5 rounded-lg shadow-xl w-32 pointer-events-none z-10">
                           <p className="font-bold text-primary-green uppercase tracking-wide">City Heart Center</p>
-                          <p className="text-secondary-text">Headquarters - Active</p>
+                          <p className="text-slate-500">Headquarters - Active</p>
                           <p className="text-slate-400 mt-0.5 text-[8px]">Lat: 17.385, Lng: 78.486</p>
                         </div>
                       </div>
@@ -568,7 +1083,7 @@ export default function Dashboard() {
                   return markers;
                 })()}
 
-                <div className="absolute bottom-2 left-2 right-2 bg-white/90 border border-border-gray px-3 py-2 rounded-lg backdrop-blur-md flex items-center justify-between text-[9px] text-secondary-text">
+                <div className="absolute bottom-2 left-2 right-2 bg-white/90 border border-border-gray px-3 py-2 rounded-lg backdrop-blur-md flex items-center justify-between text-[9px] text-slate-500">
                   <span>VVF GPS Map Monitoring</span>
                   <span className="text-primary-green font-bold uppercase animate-pulse">Live</span>
                 </div>
@@ -580,15 +1095,15 @@ export default function Dashboard() {
           <div className={`bg-white border border-border-gray rounded-xl p-3 sm:p-5 flex flex-col h-[300px] sm:h-[380px] shadow-sm max-w-full min-w-0 mobile-contained ${user?.role === 'Reception' ? 'lg:col-span-3' : 'lg:col-span-2'}`}>
             <div className="flex justify-between items-center mb-4">
               <div>
-                <h3 className="text-sm font-bold text-slate-900">Live Organization Audit Logs</h3>
-                <p className="text-[10px] text-secondary-text">Real-time log of security events and mutations</p>
+                <h3 className="text-sm font-bold text-slate-500">Live Organization Audit Logs</h3>
+                <p className="text-[10px] text-slate-500">Real-time log of security events and mutations</p>
               </div>
-              <span className="text-[10px] text-secondary-text">Auto-refreshing</span>
+              <span className="text-[10px] text-slate-500">Auto-refreshing</span>
             </div>
 
             <div className="flex-1 overflow-y-auto border border-border-gray rounded-xl divide-y divide-border-gray bg-secondary-bg/30">
               {activities.length === 0 ? (
-                <div className="flex h-full items-center justify-center text-xs text-secondary-text">
+                <div className="flex h-full items-center justify-center text-xs text-slate-500">
                   No organization events recorded yet.
                 </div>
               ) : (
@@ -607,12 +1122,12 @@ export default function Dashboard() {
                           <p className="font-semibold text-slate-800">
                             {act.description || `${act.action_type} on ${act.entity_type} #${act.entity_id}`}
                           </p>
-                          <p className="text-[10px] text-secondary-text mt-0.5">
+                          <p className="text-[10px] text-slate-500 mt-0.5">
                             Performed by: <span className="text-slate-950 font-bold">{act.user_name || 'System'}</span> ({act.user_role || 'API'})
                           </p>
                         </div>
                       </div>
-                      <span className="text-[9px] text-secondary-text font-medium shrink-0 self-end sm:self-center">
+                      <span className="text-[9px] text-slate-500 font-medium shrink-0 self-end sm:self-center">
                         {dateStr}
                       </span>
                     </div>

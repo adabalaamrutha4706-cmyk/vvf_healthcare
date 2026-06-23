@@ -2,8 +2,10 @@ import { Router } from 'express';
 import {
   getUsers,
   getDoctors,
+  getDentists,
   getExecutives,
   getTelecallers,
+  getTechnicians,
   createUser,
   updateUser,
   deleteUser,
@@ -13,10 +15,12 @@ import { requireAuth, requireRole } from '../middleware/auth';
 
 const router = Router();
 
-// Publicly authenticated endpoint to fetch doctors list for scheduling
+// Publicly authenticated endpoint to fetch doctors/dentists/technicians list for scheduling
 router.get('/doctors', requireAuth, getDoctors);
+router.get('/dentists', requireAuth, getDentists);
 router.get('/executives', requireAuth, getExecutives);
 router.get('/telecallers', requireAuth, getTelecallers);
+router.get('/technicians', requireAuth, getTechnicians);
 
 // Admin & Superadmin User CRUD
 router.get('/', requireAuth, requireRole(['Admin', 'Superadmin']), getUsers);

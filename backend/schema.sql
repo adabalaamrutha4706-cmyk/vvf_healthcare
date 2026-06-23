@@ -21,9 +21,18 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     role VARCHAR(100) NOT NULL,
     phone VARCHAR(100),
+    personal_email VARCHAR(255),
+    age INTEGER,
+    date_of_birth DATE,
+    gender VARCHAR(50),
+    about TEXT,
     is_active BOOLEAN DEFAULT TRUE,
     is_deleted BOOLEAN DEFAULT FALSE,
     deleted_at TIMESTAMP WITH TIME ZONE,
+    photo_url TEXT,
+    password_change_count INTEGER DEFAULT 0,
+    password_change_limit INTEGER DEFAULT 3,
+    password_change_locked BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -116,8 +125,17 @@ CREATE TABLE IF NOT EXISTS appointments (
     paid_amount DECIMAL(12, 2) DEFAULT 0.00,
     payment_status VARCHAR(100) DEFAULT 'Unpaid',
     created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_by_user_id INTEGER,
+    created_by_name VARCHAR(255),
+    created_by_role VARCHAR(100),
     is_deleted BOOLEAN DEFAULT FALSE,
     deleted_at TIMESTAMP WITH TIME ZONE,
+    telecalling_status VARCHAR(50),
+    telecaller_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    callback_date TIMESTAMP WITH TIME ZONE,
+    outbound_notes TEXT,
+    moved_to_telecalling BOOLEAN DEFAULT FALSE,
+    moved_to_telecalling_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -129,9 +147,12 @@ CREATE TABLE IF NOT EXISTS payments (
     amount DECIMAL(12, 2) NOT NULL,
     payment_method VARCHAR(100),
     transaction_ref VARCHAR(255),
+    upi_app VARCHAR(100),
+    payer_upi_id VARCHAR(255),
     notes TEXT,
     created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    payment_splits JSONB DEFAULT NULL
 );
 
 -- 6. Leads Table
@@ -158,6 +179,8 @@ CREATE TABLE IF NOT EXISTS visits (
     end_time TIMESTAMP WITH TIME ZONE,
     summary TEXT,
     notes TEXT,
+    visit_type VARCHAR(100) DEFAULT 'Field Visit',
+    duration_minutes INTEGER,
     status VARCHAR(100) DEFAULT 'In Progress',
     gps_lat DOUBLE PRECISION,
     gps_lng DOUBLE PRECISION,
@@ -266,3 +289,185 @@ CREATE TABLE IF NOT EXISTS appointment_edit_history (
 
 -- Index for history lookups
 CREATE INDEX IF NOT EXISTS idx_appointment_edit_history_appointment ON appointment_edit_history(appointment_id);
+
+-- 12. Therapy Sessions Table
+CREATE TABLE IF NOT EXISTS therapy_sessions (
+    id SERIAL PRIMARY KEY,
+    patient_name VARCHAR(255) NOT NULL,
+    mobile_number VARCHAR(100) NOT NULL,
+    therapy_type VARCHAR(100) NOT NULL, -- 'HBOT', 'Ozone', 'Physiotherapy', etc.
+    timings VARCHAR(255),
+    rescheduled VARCHAR(50) DEFAULT 'No',
+    rescheduled_date VARCHAR(100),
+    rescheduled_time VARCHAR(100),
+    actual_start VARCHAR(100),
+    session_date DATE NOT NULL,
+    end_time VARCHAR(100),
+    op_technician_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    sop_technician_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    op_verified BOOLEAN DEFAULT FALSE,
+    sop_verified BOOLEAN DEFAULT FALSE,
+    verification_date TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(100) DEFAULT 'Pending Verification',
+    remarks TEXT,
+    hospital_id INTEGER REFERENCES hospitals(id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 13. Therapy HBOT Details
+CREATE TABLE IF NOT EXISTS therapy_hbot (
+    id SERIAL PRIMARY KEY,
+    session_id INTEGER NOT NULL REFERENCES therapy_sessions(id) ON DELETE CASCADE,
+    dive_surface_timings VARCHAR(255),
+    pressure_type VARCHAR(100),
+    pressure_value INTEGER,
+    next_session_date VARCHAR(100),
+    next_session_time VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 14. Therapy Ozone Details
+CREATE TABLE IF NOT EXISTS therapy_ozone (
+    id SERIAL PRIMARY KEY,
+    session_id INTEGER NOT NULL REFERENCES therapy_sessions(id) ON DELETE CASCADE,
+    dive_surface_timings VARCHAR(255),
+    pressure_type VARCHAR(100),
+    pressure_value INTEGER,
+    next_session_date VARCHAR(100),
+    next_session_time VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 15. Therapy Physiotherapy Details
+CREATE TABLE IF NOT EXISTS therapy_physiotherapy (
+    id SERIAL PRIMARY KEY,
+    session_id INTEGER NOT NULL REFERENCES therapy_sessions(id) ON DELETE CASCADE,
+    dive_surface_timings VARCHAR(255),
+    pressure_type VARCHAR(100),
+    pressure_value INTEGER,
+    next_session_date VARCHAR(100),
+    next_session_time VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 16. Therapy Dental Details
+CREATE TABLE IF NOT EXISTS therapy_dental (
+    id SERIAL PRIMARY KEY,
+    session_id INTEGER NOT NULL REFERENCES therapy_sessions(id) ON DELETE CASCADE,
+    dive_surface_timings VARCHAR(255),
+    pressure_type VARCHAR(100),
+    pressure_value INTEGER,
+    next_session_date VARCHAR(100),
+    next_session_time VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 17. Therapy Pelvic Chair Details
+CREATE TABLE IF NOT EXISTS therapy_pelvic_chair (
+    id SERIAL PRIMARY KEY,
+    session_id INTEGER NOT NULL REFERENCES therapy_sessions(id) ON DELETE CASCADE,
+    dive_surface_timings VARCHAR(255),
+    pressure_type VARCHAR(100),
+    pressure_value INTEGER,
+    next_session_date VARCHAR(100),
+    next_session_time VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 18. Therapy SIPCD Details
+CREATE TABLE IF NOT EXISTS therapy_sipcd (
+    id SERIAL PRIMARY KEY,
+    session_id INTEGER NOT NULL REFERENCES therapy_sessions(id) ON DELETE CASCADE,
+    dive_surface_timings VARCHAR(255),
+    pressure_type VARCHAR(100),
+    pressure_value INTEGER,
+    next_session_date VARCHAR(100),
+    next_session_time VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 19. Therapy Zero Gravity Details
+CREATE TABLE IF NOT EXISTS therapy_zero_gravity (
+    id SERIAL PRIMARY KEY,
+    session_id INTEGER NOT NULL REFERENCES therapy_sessions(id) ON DELETE CASCADE,
+    dive_surface_timings VARCHAR(255),
+    pressure_type VARCHAR(100),
+    pressure_value INTEGER,
+    next_session_date VARCHAR(100),
+    next_session_time VARCHAR(100),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 20. Therapy Hydrogen Inhalation Details
+CREATE TABLE IF NOT EXISTS therapy_hydrogen_inhalation (
+    id SERIAL PRIMARY KEY,
+    session_id INTEGER NOT NULL REFERENCES therapy_sessions(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 21. Therapy Lab Details
+CREATE TABLE IF NOT EXISTS therapy_lab (
+    id SERIAL PRIMARY KEY,
+    session_id INTEGER NOT NULL REFERENCES therapy_sessions(id) ON DELETE CASCADE,
+    tests TEXT,
+    reported VARCHAR(50) DEFAULT 'No',
+    report_printed VARCHAR(50) DEFAULT 'No',
+    whatsapp_report VARCHAR(50) DEFAULT 'Not Sent',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indices for therapy sessions
+CREATE INDEX IF NOT EXISTS idx_therapy_sessions_patient ON therapy_sessions(patient_name);
+CREATE INDEX IF NOT EXISTS idx_therapy_sessions_date ON therapy_sessions(session_date);
+CREATE INDEX IF NOT EXISTS idx_therapy_sessions_hospital ON therapy_sessions(hospital_id);
+CREATE INDEX IF NOT EXISTS idx_therapy_sessions_op ON therapy_sessions(op_technician_id);
+CREATE INDEX IF NOT EXISTS idx_therapy_sessions_sop ON therapy_sessions(sop_technician_id);
+
+-- 22. Field Appointments Table
+CREATE TABLE IF NOT EXISTS field_appointments (
+    id SERIAL PRIMARY KEY,
+    patient_lead_id VARCHAR(100) UNIQUE NOT NULL,
+    full_name VARCHAR(255) NOT NULL,
+    age INTEGER NOT NULL,
+    gender VARCHAR(50) NOT NULL,
+    phone_number VARCHAR(100) NOT NULL,
+    appointment_type VARCHAR(255) NOT NULL,
+    medical_history TEXT,
+    executive_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    executive_name VARCHAR(255) NOT NULL,
+    status VARCHAR(100) DEFAULT 'New Lead',
+    assigned_telecaller_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    assigned_telecaller_name VARCHAR(255),
+    assigned_at TIMESTAMP WITH TIME ZONE,
+    last_followup_date TIMESTAMP WITH TIME ZONE,
+    next_followup_date TIMESTAMP WITH TIME ZONE,
+    telecaller_notes TEXT,
+    lead_status VARCHAR(100) DEFAULT 'New Lead',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_field_appointments_lead_id ON field_appointments(patient_lead_id);
+CREATE INDEX IF NOT EXISTS idx_field_appointments_executive ON field_appointments(executive_id);
+CREATE INDEX IF NOT EXISTS idx_field_appointments_telecaller ON field_appointments(assigned_telecaller_id);
+
+CREATE TABLE IF NOT EXISTS auto_redistribution_log (
+    id SERIAL PRIMARY KEY,
+    redistribution_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    trigger_reason VARCHAR(255) NOT NULL,
+    leads_moved INTEGER NOT NULL,
+    active_telecallers INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+

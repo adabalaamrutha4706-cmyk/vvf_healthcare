@@ -171,7 +171,16 @@ export const createHospital = async (req: AuthenticatedRequest, res: Response) =
     const legacyHospitalId = legacyHospitalIdInput ? legacyHospitalIdInput.trim() : null;
 
     // Run geocoder (OSM Nominatim with fallback)
-    const geoResult = await geocode(address || `${city}, ${state}`, google_maps_link);
+    let resolvedLat = req.body.latitude !== undefined && req.body.latitude !== null && req.body.latitude !== '' ? parseFloat(req.body.latitude) : null;
+    let resolvedLng = req.body.longitude !== undefined && req.body.longitude !== null && req.body.longitude !== '' ? parseFloat(req.body.longitude) : null;
+    let resolvedStatus = 'MANUAL_ENTRY';
+
+    if (resolvedLat === null || resolvedLng === null || isNaN(resolvedLat) || isNaN(resolvedLng)) {
+      const geoResult = await geocode(address || `${city}, ${state}`, google_maps_link);
+      resolvedLat = geoResult.latitude;
+      resolvedLng = geoResult.longitude;
+      resolvedStatus = geoResult.status;
+    }
 
     const hospital = await withTransaction(async (client) => {
       // Concurrency lock to prevent race conditions during sequential generation
@@ -244,8 +253,8 @@ export const createHospital = async (req: AuthenticatedRequest, res: Response) =
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34) RETURNING *`,
         [
           name, city, state, contact_person || '', phone || '', status || 'ACTIVE',
-          geoResult.latitude,
-          geoResult.longitude,
+          resolvedLat,
+          resolvedLng,
           address || '',
           landmark || '',
           pincode || '',
@@ -270,7 +279,7 @@ export const createHospital = async (req: AuthenticatedRequest, res: Response) =
           temporarily_closed !== undefined ? (temporarily_closed === true || temporarily_closed === 'true') : false,
           userId || null,
           hospitalUid,
-          geoResult.status,
+          resolvedStatus,
           legacyHospitalId
         ]
       );
@@ -448,12 +457,20 @@ export const updateHospital = async (req: AuthenticatedRequest, res: Response) =
     const newGeofence = geofencing_enabled !== undefined ? (geofencing_enabled === true || geofencing_enabled === 'true' || geofencing_enabled === 'TRUE') : hospital.geofencing_enabled;
     const newClosed = temporarily_closed !== undefined ? (temporarily_closed === true || temporarily_closed === 'true' || temporarily_closed === 'TRUE') : hospital.temporarily_closed;
 
-    // Run geocoder if address or link is changed
+    // Run geocoder if address or link is changed, or use manual coordinates if provided
     let resolvedLat = hospital.latitude;
     let resolvedLng = hospital.longitude;
     let resolvedStatus = hospital.geo_verification_status || 'MANUAL_REVIEW_REQUIRED';
 
-    if (address !== undefined || google_maps_link !== undefined) {
+    if (req.body.latitude !== undefined && req.body.longitude !== undefined) {
+      const pLat = req.body.latitude !== null && req.body.latitude !== '' ? parseFloat(req.body.latitude) : null;
+      const pLng = req.body.longitude !== null && req.body.longitude !== '' ? parseFloat(req.body.longitude) : null;
+      if (pLat !== null && pLng !== null && !isNaN(pLat) && !isNaN(pLng)) {
+        resolvedLat = pLat;
+        resolvedLng = pLng;
+        resolvedStatus = 'MANUAL_ENTRY';
+      }
+    } else if (address !== undefined || google_maps_link !== undefined) {
       const geoResult = await geocode(newAddress, newGmaps);
       resolvedLat = geoResult.latitude;
       resolvedLng = geoResult.longitude;

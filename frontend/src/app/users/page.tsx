@@ -36,6 +36,22 @@ export default function UsersPage() {
   const [phone, setPhone] = useState('');
   const [isActive, setIsActive] = useState(true);
 
+  // Role Options list (Superadmin only if logged in user is Superadmin)
+  const isSuperadmin = user?.role === 'Superadmin';
+  const roleOptions = [
+    { value: 'Doctor', label: '🩺 Doctor (Clinician)' },
+    { value: 'Dental Doctor', label: '🦷 Dental Doctor' },
+    { value: 'Reception', label: '📝 Reception Desk' },
+    { value: 'Telecaller', label: '📞 Telecaller Outreach' },
+    { value: 'Executive', label: '🏃‍♂️ Field Executive' },
+    { value: 'OP Technician', label: '⚙️ OP Technician' },
+    { value: 'SOP Technician', label: '🔍 SOP Technician' },
+    { value: 'Admin', label: '💼 Administrator' },
+  ];
+  if (isSuperadmin) {
+    roleOptions.push({ value: 'Superadmin', label: '👑 Super Administrator' });
+  }
+
   // Frontend real-time validations errors
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({});
@@ -45,7 +61,7 @@ export default function UsersPage() {
   };
 
   const getInputClass = (fieldName: string, value: string) => {
-    const base = "w-full bg-white border rounded-xl py-2 px-3 text-xs text-primary-text outline-none transition-all";
+    const base = "w-full bg-white border rounded-xl py-2 px-3 text-xs text-slate-500 outline-none transition-all";
     if (touchedFields[fieldName]) {
       if (formErrors[fieldName]) {
         return `${base} border-rose-300 focus:border-rose-500 focus:ring-1 focus:ring-rose-500`;
@@ -259,11 +275,11 @@ export default function UsersPage() {
         {/* Header Block */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-lg sm:text-2xl font-bold text-primary-text flex items-center gap-2">
+            <h1 className="text-lg sm:text-2xl font-bold text-slate-500 flex items-center gap-2">
               Team & Staff Management
               <Users className="h-5 w-5 text-primary-green" />
             </h1>
-            <p className="text-sm text-secondary-text mt-0.5">
+            <p className="text-sm text-slate-500 mt-0.5">
               Generate corporate accounts, update roles (RBAC overrides), and suspend profiles.
             </p>
           </div>
@@ -295,14 +311,14 @@ export default function UsersPage() {
         {/* Search Panel */}
         <div className="bg-white border border-border-gray p-3 sm:p-4 rounded-xl sm:rounded-2xl">
           <div className="relative">
-            <Search className="absolute left-3 top-3 h-4.5 w-4.5 text-secondary-text" />
+            <Search className="absolute left-3 top-3 h-4.5 w-4.5 text-slate-500" />
             <input
               id="users-search"
               type="text"
               placeholder="Search staff by name, email, or role..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2.5 pl-10 pr-4 text-xs text-primary-text placeholder-slate-400 outline-none transition-all"
+              className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2.5 pl-10 pr-4 text-xs text-slate-500 placeholder-slate-400 outline-none transition-all"
             />
           </div>
         </div>
@@ -315,7 +331,7 @@ export default function UsersPage() {
         ) : filteredUsers.length === 0 ? (
           <div className="bg-white/60 border border-border-gray p-12 text-center rounded-2xl flex flex-col items-center justify-center">
             <Users className="h-10 w-10 text-slate-600 mb-3" />
-            <p className="text-secondary-text text-sm font-medium">No matching staff accounts found.</p>
+            <p className="text-slate-500 text-sm font-medium">No matching staff accounts found.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
@@ -332,7 +348,7 @@ export default function UsersPage() {
                 <div>
                   <div className="flex justify-between items-start gap-2 mb-3">
                     <div>
-                      <h3 className="font-bold text-primary-text text-sm truncate leading-tight flex items-center gap-1.5">
+                      <h3 className="font-bold text-slate-500 text-sm truncate leading-tight flex items-center gap-1.5">
                         {staff.name}
                         {!staff.is_active && (
                           <span className="px-1.5 py-0.5 bg-alert-bg/60 text-rose-450 border border-rose-900/30 rounded text-[8px] font-bold uppercase tracking-wider shrink-0">
@@ -345,7 +361,7 @@ export default function UsersPage() {
                     <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold shrink-0 flex items-center gap-1.5 ${
                       staff.current_session_status === 'Active'
                         ? 'bg-very-light-green/60 text-primary-green border border-light-green/40' 
-                        : 'bg-white text-secondary-text border border-border-gray'
+                        : 'bg-white text-slate-500 border border-border-gray'
                     }`}>
                       {staff.current_session_status === 'Active' ? (
                         <>
@@ -362,33 +378,33 @@ export default function UsersPage() {
                   </div>
 
                   <div className="space-y-2 bg-white/60 border border-border-gray p-3 rounded-xl mb-4 text-xs">
-                    <div className="flex items-center gap-2 text-secondary-text truncate">
-                      <Mail className="h-3.5 w-3.5 text-secondary-text" />
+                    <div className="flex items-center gap-2 text-slate-500 truncate">
+                      <Mail className="h-3.5 w-3.5 text-slate-500" />
                       <span>{staff.email}</span>
                     </div>
                     {staff.phone && (
-                      <div className="flex items-center gap-2 text-secondary-text">
-                        <Phone className="h-3.5 w-3.5 text-secondary-text" />
+                      <div className="flex items-center gap-2 text-slate-500">
+                        <Phone className="h-3.5 w-3.5 text-slate-500" />
                         <span>{staff.phone}</span>
                       </div>
                     )}
                     {/* Live Session Tracker details */}
-                    <div className="pt-2 mt-2 border-t border-border-gray/50 space-y-1 text-[10px] text-secondary-text">
+                    <div className="pt-2 mt-2 border-t border-border-gray/50 space-y-1 text-[10px] text-slate-500">
                       {staff.current_session_status === 'Active' ? (
                         <>
                           <div className="flex justify-between items-center">
-                            <span className="text-secondary-text">Login Time:</span>
+                            <span className="text-slate-500">Login Time:</span>
                             <span className="font-bold text-primary-green">{formatTime(staff.last_login_time)}</span>
                           </div>
                           <div className="flex justify-between items-center">
-                            <span className="text-secondary-text">Session Duration:</span>
+                            <span className="text-slate-500">Session Duration:</span>
                             <span className="font-mono text-primary-green font-bold">{staff.current_session_duration}m active</span>
                           </div>
                         </>
                       ) : (
                         <div className="flex justify-between items-center">
-                          <span className="text-secondary-text">Last Seen:</span>
-                          <span className="font-semibold text-secondary-text">{formatDateTime(staff.last_logout_time || staff.last_login_time)}</span>
+                          <span className="text-slate-500">Last Seen:</span>
+                          <span className="font-semibold text-slate-500">{formatDateTime(staff.last_logout_time || staff.last_login_time)}</span>
                         </div>
                       )}
                     </div>
@@ -400,7 +416,7 @@ export default function UsersPage() {
                   <button
                     id={`btn-edit-user-${staff.id}`}
                     onClick={() => handleOpenEdit(staff)}
-                    className="p-1.5 text-secondary-text hover:text-primary-green hover:bg-very-light-green rounded-lg cursor-pointer transition-colors"
+                    className="p-1.5 text-slate-500 hover:text-primary-green hover:bg-very-light-green rounded-lg cursor-pointer transition-colors"
                     title="Edit profile"
                   >
                     <Edit3 className="h-4 w-4" />
@@ -408,7 +424,7 @@ export default function UsersPage() {
                   <button
                     id={`btn-delete-user-${staff.id}`}
                     onClick={() => handleDelete(staff.id)}
-                    className="p-1.5 text-secondary-text hover:text-alert-text hover:bg-very-light-green rounded-lg cursor-pointer transition-colors"
+                    className="p-1.5 text-slate-500 hover:text-alert-text hover:bg-very-light-green rounded-lg cursor-pointer transition-colors"
                     title="Delete Account"
                     disabled={staff.id === user?.id}
                   >
@@ -436,120 +452,159 @@ export default function UsersPage() {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="w-full max-w-md bg-white border border-border-gray rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col"
+                className="w-[95%] md:w-[90%] lg:w-full lg:max-w-4xl bg-white border border-border-gray rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col max-h-[90vh]"
               >
-                <div className="px-6 py-4 border-b border-border-gray flex items-center justify-between">
-                  <h3 className="font-bold text-sm text-primary-text flex items-center gap-1.5">
-                    <Sparkles className="h-4.5 w-4.5 text-primary-green" />
-                    {selectedStaff ? 'Edit Staff Account' : 'Register New Employee'}
-                  </h3>
-                  <button id="close-user-modal" onClick={() => setIsFormOpen(false)} className="text-secondary-text hover:text-primary-green cursor-pointer">
-                    <X className="h-4.5 w-4.5" />
-                  </button>
-                </div>
-
-                <form onSubmit={handleFormSubmit} className="p-6 space-y-4">
-                  <div>
-                    <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Full Name</label>
-                    <input
-                      id="form-user-name"
-                      type="text"
-                      required
-                      value={name}
-                      onChange={(e) => { setName(e.target.value); markTouched('name'); }}
-                      onBlur={() => markTouched('name')}
-                      placeholder="Anil Kumar"
-                      className={getInputClass('name', name)}
-                    />
-                    {touchedFields.name && formErrors.name && (
-                      <p className="text-[10px] text-alert-text mt-1 font-semibold">{formErrors.name}</p>
-                    )}
+                <form onSubmit={handleFormSubmit} className="flex flex-col max-h-[90vh] w-full">
+                  {/* Fixed Header */}
+                  <div className="px-6 py-4 border-b border-border-gray flex items-center justify-between shrink-0 bg-white">
+                    <h3 className="font-bold text-sm text-slate-500 flex items-center gap-1.5">
+                      <Sparkles className="h-4.5 w-4.5 text-primary-green" />
+                      {selectedStaff ? 'Edit Staff Account' : 'Register New Employee'}
+                    </h3>
+                    <button type="button" id="close-user-modal" onClick={() => setIsFormOpen(false)} className="text-slate-500 hover:text-primary-green cursor-pointer">
+                      <X className="h-4.5 w-4.5" />
+                    </button>
                   </div>
 
-                  <div>
-                    <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Corporate Email</label>
-                    <input
-                      id="form-user-email"
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="anil@vvf.org"
-                      className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-primary-text outline-none"
-                    />
-                  </div>
+                  {/* Scrollable Form Body */}
+                  <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar pb-16">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Full Name */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Full Name</label>
+                        <input
+                          id="form-user-name"
+                          type="text"
+                          required
+                          value={name}
+                          onChange={(e) => { setName(e.target.value); markTouched('name'); }}
+                          onBlur={() => markTouched('name')}
+                          placeholder="Anil Kumar"
+                          className={getInputClass('name', name)}
+                        />
+                        {touchedFields.name && formErrors.name && (
+                          <p className="text-[10px] text-alert-text mt-1 font-semibold">{formErrors.name}</p>
+                        )}
+                      </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">
-                        {selectedStaff ? 'Update Password (Optional)' : 'Access Password'}
-                      </label>
-                      <input
-                        id="form-user-password"
-                        type="password"
-                        required={!selectedStaff}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="••••••••"
-                        className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-primary-text outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Role Permission</label>
-                      <SelectField
-                        id="form-user-role"
-                        value={role}
-                        onChange={setRole}
-                        triggerClassName="py-2 px-3 text-xs"
-                        options={[
-                          { value: 'Doctor', label: '🩺 Doctor (Clinician)' },
-                          { value: 'Chief Doctor', label: '🏥 Chief Doctor' },
-                          { value: 'Reception', label: '📝 Reception Desk' },
-                          { value: 'Telecaller', label: '📞 Telecaller Outreach' },
-                          { value: 'Executive', label: '🏃‍♂️ Field Executive' },
-                          { value: 'Admin', label: '💼 Administrator' },
-                        ]}
-                      />
-                    </div>
-                  </div>
+                      {/* Corporate Email */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Corporate Email</label>
+                        <input
+                          id="form-user-email"
+                          type="email"
+                          required
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="anil@vvf.org"
+                          className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none"
+                        />
+                      </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Phone Number</label>
-                      <input
-                        id="form-user-phone"
-                        type="tel"
-                        value={phone}
-                        onChange={(e) => { setPhone(e.target.value); markTouched('phone'); }}
-                        onBlur={() => markTouched('phone')}
-                        placeholder="9876543210"
-                        className={getInputClass('phone', phone)}
-                      />
-                      {touchedFields.phone && formErrors.phone && (
-                        <p className="text-[10px] text-alert-text mt-1 font-semibold">{formErrors.phone}</p>
+                      {/* Password */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                          {selectedStaff ? 'Update Password (Optional)' : 'Access Password'}
+                        </label>
+                        <input
+                          id="form-user-password"
+                          type="password"
+                          required={!selectedStaff}
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          placeholder="••••••••"
+                          className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none"
+                        />
+                      </div>
+
+                      {/* Role Permission */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Role Permission</label>
+                        <SelectField
+                          id="form-user-role"
+                          value={role}
+                          onChange={setRole}
+                          triggerClassName="py-2 px-3 text-xs"
+                          options={roleOptions}
+                        />
+                      </div>
+
+                      {/* Phone Number */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Phone Number</label>
+                        <input
+                          id="form-user-phone"
+                          type="tel"
+                          value={phone}
+                          onChange={(e) => { setPhone(e.target.value); markTouched('phone'); }}
+                          onBlur={() => markTouched('phone')}
+                          placeholder="9876543210"
+                          className={getInputClass('phone', phone)}
+                        />
+                        {touchedFields.phone && formErrors.phone && (
+                          <p className="text-[10px] text-alert-text mt-1 font-semibold">{formErrors.phone}</p>
+                        )}
+                      </div>
+
+                      {/* Employee ID */}
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Employee ID</label>
+                        <input
+                          id="form-user-emp-id"
+                          type="text"
+                          disabled
+                          value={selectedStaff ? `EMP-${String(selectedStaff.id).padStart(3, '0')}` : 'EMP-*** (Auto-generated)'}
+                          className="w-full bg-slate-50 border border-border-gray rounded-xl py-2 px-3 text-xs text-slate-500 outline-none cursor-not-allowed"
+                        />
+                      </div>
+
+                      {/* System Access State */}
+                      <div className={selectedStaff ? "col-span-1" : "col-span-1 md:col-span-2"}>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">System Access State</label>
+                        <SelectField
+                          id="form-user-active"
+                          value={isActive ? 'true' : 'false'}
+                          onChange={(value) => setIsActive(value === 'true')}
+                          triggerClassName="py-2 px-3 text-xs"
+                          options={[
+                            { value: 'true', label: 'Active (Granted Access)' },
+                            { value: 'false', label: 'Suspended (Blocked Access)' },
+                          ]}
+                        />
+                      </div>
+
+                      {/* Password Change Tracking (Read-Only) */}
+                      {selectedStaff && (
+                        <div className="col-span-1 bg-slate-50 border border-border-gray rounded-xl p-3.5 space-y-2.5 text-xs text-slate-500">
+                          <h4 className="font-bold text-[10px] text-slate-500 uppercase tracking-wider">
+                            Password Change Tracking
+                          </h4>
+                          <div className="grid grid-cols-2 gap-2 text-[11px]">
+                            <div>
+                              <span className="text-slate-500 block text-[9px] uppercase font-bold">Attempts Used</span>
+                              <span className="font-semibold text-slate-500">
+                                {selectedStaff.password_change_count != null ? selectedStaff.password_change_count : 0} / {selectedStaff.password_change_limit != null ? selectedStaff.password_change_limit : 3}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-slate-500 block text-[9px] uppercase font-bold">Lock Status</span>
+                              <span className={`font-semibold ${selectedStaff.password_change_locked ? 'text-rose-600' : 'text-primary-green'}`}>
+                                {selectedStaff.password_change_locked ? 'Locked' : 'Active'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
                       )}
                     </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">System Access State</label>
-                      <SelectField
-                        id="form-user-active"
-                        value={isActive ? 'true' : 'false'}
-                        onChange={(value) => setIsActive(value === 'true')}
-                        triggerClassName="py-2 px-3 text-xs"
-                        options={[
-                          { value: 'true', label: 'Active (Granted Access)' },
-                          { value: 'false', label: 'Suspended (Blocked Access)' },
-                        ]}
-                      />
-                    </div>
                   </div>
 
-                  <div className="pt-4 border-t border-border-gray flex items-center justify-end gap-2.5">
+                  {/* Fixed Footer */}
+                  <div className="px-6 py-4 border-t border-border-gray flex items-center justify-end gap-2.5 shrink-0 bg-white">
                     <button
                       id="btn-cancel-user"
                       type="button"
                       onClick={() => setIsFormOpen(false)}
-                      className="px-4 py-2 border border-border-gray hover:bg-secondary-bg text-xs text-secondary-text rounded-xl transition-all cursor-pointer font-semibold"
+                      className="px-4 py-2 border border-border-gray hover:bg-secondary-bg text-xs text-slate-500 rounded-xl transition-all cursor-pointer font-semibold"
                     >
                       Cancel
                     </button>

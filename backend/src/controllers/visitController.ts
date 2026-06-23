@@ -179,6 +179,26 @@ export const startVisit = async (req: AuthenticatedRequest, res: Response) => {
         errorCode: 'ACCESS_DENIED'
       });
     }
+
+    if (req.file) {
+      if (req.file.size <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Uploaded file is empty or corrupted.',
+          errorCode: 'INVALID_FILE'
+        });
+      }
+
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!allowedTypes.includes(req.file.mimetype)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Supported image types are JPEG, PNG, and WEBP.',
+          errorCode: 'INVALID_FILE_TYPE'
+        });
+      }
+    }
+
     const { 
       hospital_id, 
       gps_lat, 
@@ -188,7 +208,8 @@ export const startVisit = async (req: AuthenticatedRequest, res: Response) => {
       is_mock_location, 
       city, 
       state,
-      captured_at
+      captured_at,
+      visit_type
     } = req.body;
 
     if (!hospital_id) {
@@ -225,24 +246,22 @@ export const startVisit = async (req: AuthenticatedRequest, res: Response) => {
       });
     }
 
-    // 4. Duplicate Check-in Protection: same executive cannot create another visit for the same hospital within 30 minutes unless previous is Expired or Cancelled
-    const thirtyMinsAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-    const duplicateCheck = await query(
-      `SELECT id, status FROM visits 
-       WHERE executive_id = $1 AND hospital_id = $2 
-         AND start_time > $3 AND is_deleted = false
-       ORDER BY start_time DESC LIMIT 1`,
-      [executiveId, parseInt(hospital_id, 10), thirtyMinsAgo]
+    const visitType = visit_type === 'Dental Visit' ? 'Dental Visit' : 'Field Visit';
+
+    // Prevent multiple active check-ins of the same type
+    const activeCheck = await query(
+      `SELECT id FROM visits 
+       WHERE executive_id = $1 AND visit_type = $2 
+         AND status IN ('Checked In', 'Partially Completed', 'Pending Evidence', 'In Progress') 
+         AND is_deleted = false LIMIT 1`,
+      [executiveId, visitType]
     );
-    if (duplicateCheck.rows.length > 0) {
-      const prevVisit = duplicateCheck.rows[0];
-      if (prevVisit.status !== 'Expired' && prevVisit.status !== 'Cancelled') {
-        return res.status(400).json({
-          success: false,
-          message: 'Duplicate check-in protection. You have recently checked in to this hospital. Please wait 30 minutes or complete the previous visit.',
-          errorCode: 'DUPLICATE_CHECKIN'
-        });
-      }
+    if (activeCheck.rows.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `You already have an active ${visitType.toLowerCase()} session in progress. Please check out first.`,
+        errorCode: 'ACTIVE_VISIT_EXISTS'
+      });
     }
 
     // Check if hospital exists and get its coordinates
@@ -320,9 +339,9 @@ export const startVisit = async (req: AuthenticatedRequest, res: Response) => {
         geo_verification_status, checkin_time, visit_status,
         distance_from_hospital_meters, device_info, is_mock_location,
         expires_at, completion_progress, evidence_uploaded, summary_submitted, observations_submitted,
-        checkin_hospital_lat, checkin_hospital_lng
+        checkin_hospital_lat, checkin_hospital_lng, visit_type
       )
-      VALUES ($1, $2, $3, 'Checked In', $4, $5, $6, $7, $8, $9, $10, $11, $12, 'Checked In', $13, $14, $15, $16, 0, false, false, false, $17, $18) RETURNING *`,
+      VALUES ($1, $2, $3, 'Checked In', $4, $5, $6, $7, $8, $9, $10, $11, $12, 'Checked In', $13, $14, $15, $16, 0, false, false, false, $17, $18, $19) RETURNING *`,
       [
         executiveId,
         parseInt(hospital_id, 10),
@@ -341,11 +360,38 @@ export const startVisit = async (req: AuthenticatedRequest, res: Response) => {
         is_mock_location === true || is_mock_location === 'true',
         expiresAt,
         hospLat,
-        hospLng
+        hospLng,
+        visitType
       ]
     );
 
     const visit = result.rows[0];
+
+    if (req.file) {
+      const filename = req.file.filename;
+      const dateStr = new Date().toISOString().split('T')[0];
+      const photoUrl = `/uploads/visits/${dateStr}/${filename}`;
+
+      const photoResult = await query(
+        `INSERT INTO visit_photos (visit_id, photo_url, gps_lat, gps_lng, city, state, captured_at, captured_latitude, captured_longitude, captured_by)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+        [
+          visit.id,
+          photoUrl,
+          parseFloat(gps_lat),
+          parseFloat(gps_lng),
+          city || '',
+          state || '',
+          nowStr,
+          parseFloat(gps_lat),
+          parseFloat(gps_lng),
+          executiveId
+        ]
+      );
+      visit.photos = [photoResult.rows[0]];
+    } else {
+      visit.photos = [];
+    }
 
     // Increment total visits and set last visit date for hospital
     await query(
@@ -413,7 +459,7 @@ export const uploadVisitPhoto = async (req: AuthenticatedRequest, res: Response)
     }
 
     const visitResult = await query(
-      `SELECT v.*, h.name as hospital_name 
+      `SELECT v.*, h.name as hospital_name, h.allowed_radius 
        FROM visits v
        JOIN hospitals h ON v.hospital_id = h.id
        WHERE v.id = $1 AND v.is_deleted = false`,
@@ -438,8 +484,8 @@ export const uploadVisitPhoto = async (req: AuthenticatedRequest, res: Response)
       });
     }
 
-    // Executives cannot modify completed or expired visits
-    if (visit.status === 'Completed' || visit.status === 'Expired' || visit.status === 'Cancelled') {
+    // Executives cannot modify expired or cancelled visits
+    if (visit.status === 'Expired' || visit.status === 'Cancelled') {
       return res.status(400).json({
         success: false,
         message: `Cannot upload photos for a ${visit.status.toLowerCase()} visit.`,
@@ -465,7 +511,8 @@ export const uploadVisitPhoto = async (req: AuthenticatedRequest, res: Response)
         parseFloat(hospLat),
         parseFloat(hospLng)
       );
-      isInsideGeofence = distance <= 200;
+      const allowedRadius = visit.allowed_radius !== null && visit.allowed_radius !== undefined ? visit.allowed_radius : 200;
+      isInsideGeofence = distance <= allowedRadius;
     }
 
     const photoResult = await query(
@@ -531,23 +578,7 @@ export const endVisit = async (req: AuthenticatedRequest, res: Response) => {
     const executiveId = req.user?.id;
     const executiveName = req.user?.name;
     const { id } = req.params; // visit_id
-    const { summary, notes, submission_started_at } = req.body;
-
-    if (!summary || summary.trim() === '') {
-      return res.status(400).json({
-        success: false,
-        message: 'Executive Summary Checklist is mandatory to complete the visit.',
-        errorCode: 'VALIDATION_ERROR'
-      });
-    }
-
-    if (!notes || notes.trim() === '') {
-      return res.status(400).json({
-        success: false,
-        message: 'Detailed Visit Observations are mandatory to complete the visit.',
-        errorCode: 'VALIDATION_ERROR'
-      });
-    }
+    const { summary, notes, checkout_latitude, checkout_longitude, checkout_accuracy } = req.body;
 
     const visitResult = await query(
       `SELECT v.*, h.name as hospital_name 
@@ -575,122 +606,72 @@ export const endVisit = async (req: AuthenticatedRequest, res: Response) => {
       });
     }
 
-    // Executives cannot modify completed or cancelled visits
-    if (visit.status === 'Completed' || visit.status === 'Cancelled') {
+    // Check-out cannot happen unless the user has already checked in.
+    if (visit.status !== 'Checked In' && visit.status !== 'In Progress' && visit.status !== 'Partially Completed') {
       return res.status(400).json({
         success: false,
-        message: `Cannot modify a ${visit.status.toLowerCase()} visit.`,
-        errorCode: 'VISIT_NOT_EDITABLE'
+        message: 'Cannot check out. Visit is not active or has already been completed.',
+        errorCode: 'VISIT_NOT_ACTIVE'
       });
     }
 
-    // Expiration Grace Handling
-    let submissionStarted = new Date();
-    if (submission_started_at) {
-      const clientTime = new Date(submission_started_at).getTime();
-      const serverTime = Date.now();
-      // Allow if it's within a 10 minutes window
-      if (Math.abs(serverTime - clientTime) <= 10 * 60 * 1000) {
-        submissionStarted = new Date(submission_started_at);
-      }
-    }
+    const existingNotes = visit.notes || '';
+    const incomingNotes = notes || '';
+    const hasExistingNotes = existingNotes.trim() !== '' && existingNotes.trim() !== 'Checked Out';
+    const hasIncomingNotes = incomingNotes.trim() !== '' && incomingNotes.trim() !== 'Checked Out';
 
-    const isExpired = visit.status === 'Expired' || new Date(visit.expires_at).getTime() < Date.now();
-    const startedBeforeExpiry = submissionStarted.getTime() < new Date(visit.expires_at).getTime();
-
-    if (isExpired && !startedBeforeExpiry) {
+    if (!hasExistingNotes && !hasIncomingNotes) {
       return res.status(400).json({
         success: false,
-        message: 'This visit has expired and cannot be completed.',
-        errorCode: 'VISIT_EXPIRED'
-      });
-    }
-
-    // Strong File Validation for uploaded photo (if any)
-    let photoUploadedThisRequest = false;
-    let photoUrl = '';
-
-    if (req.file) {
-      if (req.file.size <= 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'Uploaded file is empty or corrupted.',
-          errorCode: 'INVALID_FILE'
-        });
-      }
-
-      const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
-      if (!allowedTypes.includes(req.file.mimetype)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Supported image types are JPEG, PNG, and WEBP.',
-          errorCode: 'INVALID_FILE_TYPE'
-        });
-      }
-
-      const filename = req.file.filename;
-      const dateStr = new Date().toISOString().split('T')[0];
-      photoUrl = `/uploads/visits/${dateStr}/${filename}`;
-      photoUploadedThisRequest = true;
-    }
-
-    // Check if evidence photo is present
-    const hasPhoto = visit.evidence_uploaded || photoUploadedThisRequest;
-    if (!hasPhoto) {
-      return res.status(400).json({
-        success: false,
-        message: 'Visit completion failed. Photo evidence is required.',
-        errorCode: 'PHOTO_REQUIRED'
+        message: 'At least one detailed visit note/observation must be submitted before completing this visit.',
+        errorCode: 'VISIT_NOTE_REQUIRED'
       });
     }
 
     const nowStr = new Date().toISOString();
+    const checkinTime = new Date(visit.checkin_time || visit.start_time);
+    const checkoutTime = new Date();
+    const durationMs = checkoutTime.getTime() - checkinTime.getTime();
+    const durationMinutes = Math.max(0, Math.round(durationMs / (1000 * 60)));
 
-    // If photo uploaded in this request, insert it into visit_photos
-    if (photoUploadedThisRequest && photoUrl) {
-      await query(
-        `INSERT INTO visit_photos (visit_id, photo_url, gps_lat, gps_lng, city, state, captured_at, captured_latitude, captured_longitude, captured_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-        [
-          visit.id,
-          photoUrl,
-          visit.gps_lat || null,
-          visit.gps_lng || null,
-          visit.city || '',
-          visit.state || '',
-          nowStr,
-          visit.gps_lat || null,
-          visit.gps_lng || null,
-          executiveId
-        ]
-      );
-      await query(
-        `UPDATE visits 
-         SET evidence_uploaded = true, photo_uploaded_at = $1 
-         WHERE id = $2`,
-        [nowStr, visit.id]
-      );
-    }
-
-    // Update summary and observations
     await query(
       `UPDATE visits
-       SET summary = $1, notes = $2, 
-           summary_submitted = true, summary_submitted_at = $3,
-           observations_submitted = true, observations_submitted_at = $3
-       WHERE id = $4`,
-      [summary, notes, nowStr, id]
+       SET status = 'Completed', 
+           visit_status = 'Completed',
+           checkout_time = $1, 
+           completed_at = $1, 
+           end_time = $1,
+           checkout_latitude = $2, 
+           checkout_longitude = $3, 
+           checkout_accuracy = $4,
+           duration_minutes = $5,
+           summary = COALESCE($6, summary, 'Checked Out'),
+           notes = COALESCE($7, notes, 'Checked Out'),
+           completion_progress = 100,
+           summary_submitted = true,
+           observations_submitted = true
+       WHERE id = $8`,
+      [
+        nowStr,
+        checkout_latitude ? parseFloat(checkout_latitude) : null,
+        checkout_longitude ? parseFloat(checkout_longitude) : null,
+        checkout_accuracy ? parseFloat(checkout_accuracy) : null,
+        durationMinutes,
+        summary || null,
+        notes || null,
+        id
+      ]
     );
 
-    // Dynamic progress tracking and status updates (should calculate to 100% and Completed)
-    const updatedVisit = await updateVisitProgressAndStatus(parseInt(id, 10));
+    const updatedVisitResult = await query('SELECT * FROM visits WHERE id = $1', [id]);
+    const updatedVisit = updatedVisitResult.rows[0];
 
     await logAudit(
       executiveId || null,
       'COMPLETE_VISIT',
       'visits',
       updatedVisit.id,
-      `Executive ${executiveName} completed visit at ${visit.hospital_name}`
+      `Executive ${executiveName} completed visit at ${visit.hospital_name} (Duration: ${durationMinutes} mins)`
     );
 
     await createNotification(
@@ -886,6 +867,14 @@ export const getVisits = async (req: AuthenticatedRequest, res: Response) => {
     await expireOverdueVisits();
     const userRole = req.user?.role;
     const userId = req.user?.id;
+    const { type } = req.query;
+
+    let typeFilter = "";
+    if (type === 'field') {
+      typeFilter = " AND (v.visit_type = 'Field Visit' OR v.visit_type IS NULL)";
+    } else if (type === 'dental') {
+      typeFilter = " AND v.visit_type = 'Dental Visit'";
+    }
 
     let result;
     if (userRole === 'Executive') {
@@ -900,7 +889,7 @@ export const getVisits = async (req: AuthenticatedRequest, res: Response) => {
          FROM visits v
          JOIN hospitals h ON v.hospital_id = h.id
          JOIN users u ON v.executive_id = u.id
-         WHERE v.is_deleted = false AND v.executive_id = $1
+         WHERE v.is_deleted = false AND v.executive_id = $1${typeFilter}
          ORDER BY v.start_time DESC`,
         [userId]
       );
@@ -916,7 +905,7 @@ export const getVisits = async (req: AuthenticatedRequest, res: Response) => {
          FROM visits v
          JOIN hospitals h ON v.hospital_id = h.id
          JOIN users u ON v.executive_id = u.id
-         WHERE v.is_deleted = false
+         WHERE v.is_deleted = false${typeFilter}
          ORDER BY v.start_time DESC`
       );
     }
@@ -925,7 +914,7 @@ export const getVisits = async (req: AuthenticatedRequest, res: Response) => {
     const visits = result.rows;
     for (const visit of visits) {
       const photosResult = await query(
-        'SELECT * FROM visit_photos WHERE visit_id = $1',
+        'SELECT vp.*, u.name as captured_by_name FROM visit_photos vp LEFT JOIN users u ON vp.captured_by = u.id WHERE vp.visit_id = $1 ORDER BY vp.captured_at ASC',
         [visit.id]
       );
       visit.photos = photosResult.rows;
@@ -972,7 +961,7 @@ export const getVisitById = async (req: AuthenticatedRequest, res: Response) => 
 
     const visit = result.rows[0];
     const photosResult = await query(
-      'SELECT * FROM visit_photos WHERE visit_id = $1',
+      'SELECT vp.*, u.name as captured_by_name FROM visit_photos vp LEFT JOIN users u ON vp.captured_by = u.id WHERE vp.visit_id = $1 ORDER BY vp.captured_at ASC',
       [visit.id]
     );
     visit.photos = photosResult.rows;
@@ -1042,6 +1031,70 @@ export const cancelVisit = async (req: AuthenticatedRequest, res: Response) => {
     return res.status(200).json({
       success: true,
       message: 'Visit cancelled successfully.'
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Internal server error.',
+      errorCode: 'INTERNAL_ERROR'
+    });
+  }
+};
+
+export const updateVisitNotes = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { notes, summary } = req.body;
+    const executiveId = req.user?.id;
+    const executiveName = req.user?.name;
+
+    const visitResult = await query(
+      'SELECT * FROM visits WHERE id = $1 AND is_deleted = false',
+      [id]
+    );
+
+    if (visitResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Visit record not found.',
+        errorCode: 'VISIT_NOT_FOUND'
+      });
+    }
+
+    const visit = visitResult.rows[0];
+
+    if (req.user?.role !== 'Admin' && req.user?.role !== 'Superadmin' && visit.executive_id !== executiveId) {
+      return res.status(403).json({
+        success: false,
+        message: 'Unauthorized to modify notes for this visit.',
+        errorCode: 'ACCESS_DENIED'
+      });
+    }
+
+    const result = await query(
+      `UPDATE visits 
+       SET notes = $1, 
+           summary = COALESCE($2, summary),
+           observations_submitted = true,
+           updated_at = NOW() 
+       WHERE id = $3 RETURNING *`,
+      [notes || '', summary || null, id]
+    );
+
+    const updatedVisit = await updateVisitProgressAndStatus(parseInt(id, 10));
+
+    await logAudit(
+      executiveId || null,
+      'UPDATE_VISIT_NOTES',
+      'visits',
+      parseInt(id, 10),
+      `Updated notes/observations for visit at hospital ID ${visit.hospital_id}`
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'Visit notes saved successfully.',
+      visit: updatedVisit || result.rows[0]
     });
   } catch (err: any) {
     return res.status(500).json({

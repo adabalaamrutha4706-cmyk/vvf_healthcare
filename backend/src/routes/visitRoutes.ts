@@ -7,7 +7,8 @@ import {
   verifyVisit,
   getVisits,
   getVisitById,
-  cancelVisit
+  cancelVisit,
+  updateVisitNotes
 } from '../controllers/visitController';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { upload } from '../middleware/upload';
@@ -20,6 +21,7 @@ router.post('/start', requireAuth, requireRole(['Admin', 'Executive', 'Superadmi
 router.post('/:id/photos', requireAuth, requireRole(['Admin', 'Executive', 'Superadmin']), upload.single('photo'), uploadVisitPhoto);
 router.post('/:id/end', requireAuth, requireRole(['Admin', 'Executive', 'Superadmin']), upload.single('photo'), endVisit);
 router.post('/:id/complete', requireAuth, requireRole(['Admin', 'Executive', 'Superadmin']), upload.single('photo'), endVisit);
+router.put('/:id/notes', requireAuth, requireRole(['Admin', 'Executive', 'Superadmin']), updateVisitNotes);
 router.post('/:id/reopen', requireAuth, requireRole(['Admin', 'Superadmin']), reopenVisit);
 router.put('/:id/verify', requireAuth, requireRole(['Admin', 'Superadmin']), verifyVisit);
 router.delete('/:id', requireAuth, requireRole(['Admin', 'Executive', 'Superadmin']), cancelVisit);

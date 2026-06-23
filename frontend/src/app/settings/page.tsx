@@ -3,12 +3,13 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { DashboardLayout } from '../../components/DashboardLayout';
-import { api } from '../../lib/api';
+import { api, BACKEND_URL } from '../../lib/api';
 import { 
   User, Shield, Lock, Save, Sparkles, Phone, Mail, Award, Key, 
-  CheckCircle2, AlertTriangle, RefreshCw, Palette, Eye, EyeOff
+  CheckCircle2, AlertTriangle, RefreshCw, Eye, EyeOff, Palette, Check
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { SelectField } from '../../components/SelectField';
 
 export default function SettingsPage() {
   const { user, updateUser } = useAuth();
@@ -16,6 +17,13 @@ export default function SettingsPage() {
   // Profile update states
   const [name, setName] = useState(user?.name || '');
   const [phone, setPhone] = useState(user?.phone || '');
+  const [personalEmail, setPersonalEmail] = useState(user?.personal_email || '');
+  const [age, setAge] = useState(user?.age != null ? String(user.age) : '');
+  const [dateOfBirth, setDateOfBirth] = useState(
+    user?.date_of_birth ? String(user.date_of_birth).split('T')[0] : ''
+  );
+  const [gender, setGender] = useState(user?.gender || 'Male');
+  const [about, setAbout] = useState(user?.about || '');
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState('');
   const [profileSuccess, setProfileSuccess] = useState('');
@@ -28,8 +36,7 @@ export default function SettingsPage() {
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
 
-  // Theme configuration (UI mock choices)
-  const [activeTheme, setActiveTheme] = useState('dark-teal');
+
 
   if (!user) return null;
 
@@ -40,10 +47,17 @@ export default function SettingsPage() {
     setProfileSuccess('');
 
     try {
-      const res = await api.auth.updateProfile({ name, phone });
+      const res = await api.auth.updateProfile({
+        name,
+        phone,
+        personal_email: personalEmail,
+        age: age ? parseInt(age, 10) : undefined,
+        date_of_birth: dateOfBirth || undefined,
+        gender,
+        about,
+      });
       
-      // Update global context user details
-      updateUser({ name, phone });
+      updateUser(res.user || { name, phone, personal_email: personalEmail, age: age ? parseInt(age, 10) : null, date_of_birth: dateOfBirth, gender, about });
       
       setProfileSuccess('Profile settings successfully saved.');
     } catch (err: any) {
@@ -93,17 +107,17 @@ export default function SettingsPage() {
         
         {/* Header Title block */}
         <div>
-          <h1 className="text-lg sm:text-2xl font-bold text-primary-text flex items-center gap-2">
+          <h1 className="text-lg sm:text-2xl font-bold text-slate-500 flex items-center gap-2">
             Account Settings
             <Shield className="h-5 w-5 text-primary-green" />
           </h1>
-          <p className="text-sm text-secondary-text mt-0.5">
+          <p className="text-sm text-slate-500 mt-0.5">
             Configure your personal profile details, credentials, and user preferences.
           </p>
         </div>
 
         {/* Settings Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
           
           {/* Left Panel: Profile Quick Summary Card */}
           <div className="space-y-4 min-w-0">
@@ -116,71 +130,43 @@ export default function SettingsPage() {
               <div className="absolute top-0 right-0 h-28 w-28 bg-very-light-green/30 rounded-bl-full pointer-events-none" />
 
               <div className="flex flex-col items-center text-center space-y-4">
-                <div className="h-14 w-14 sm:h-20 sm:w-20 rounded-full bg-primary-green flex items-center justify-center font-bold text-white text-2xl sm:text-3xl shadow-xl shadow-emerald-950/20 border-2 border-border-gray">
-                  {user.name.charAt(0).toUpperCase()}
+                <div className="h-14 w-14 sm:h-20 sm:w-20 rounded-full bg-primary-green flex items-center justify-center font-bold text-white text-2xl sm:text-3xl shadow-xl shadow-emerald-950/20 border-2 border-border-gray overflow-hidden">
+                  {user.photo_url ? (
+                    <img src={`${BACKEND_URL}${user.photo_url}`} alt={user.name} className="h-full w-full object-cover" />
+                  ) : (
+                    user.name.charAt(0).toUpperCase()
+                  )}
                 </div>
                 
                 <div>
-                  <h3 className="text-lg font-bold text-primary-text">{user.name}</h3>
+                  <h3 className="text-lg font-bold text-slate-500">{user.name}</h3>
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase bg-very-light-green/50 text-primary-green border border-light-green/40 mt-1.5">
                     <Award className="h-3 w-3" />
                     {user.role}
                   </div>
                 </div>
 
-                <div className="w-full border-t border-border-gray/80 pt-4 text-left space-y-3.5 text-xs text-secondary-text">
-                  <div className="flex items-center gap-3">
-                    <Mail className="h-4 w-4 text-secondary-text" />
-                    <span className="truncate">{user.email}</span>
+                <div className="w-full border-t border-border-gray/80 pt-4 text-left space-y-3.5 text-xs text-slate-500">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Mail className="h-4 w-4 text-slate-500 shrink-0" />
+                    <span className="truncate">{personalEmail || user.email}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <Phone className="h-4 w-4 text-secondary-text" />
+                    <Phone className="h-4 w-4 text-slate-500 shrink-0" />
                     <span>{phone || 'No phone set'}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <Shield className="h-4 w-4 text-secondary-text" />
-                    <span>Role Access: Multi-page Dashboard</span>
+                    <Shield className="h-4 w-4 text-slate-500 shrink-0" />
+                    <span>{user.role} · {gender || 'Gender not set'}</span>
                   </div>
                 </div>
               </div>
             </motion.div>
 
-            {/* Quick Themes Preference Card */}
-            <motion.div
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="bg-white border border-border-gray rounded-xl sm:rounded-3xl p-4 sm:p-6 shadow-sm sm:shadow-xl"
-            >
-              <h4 className="text-xs font-bold text-secondary-text uppercase tracking-wider mb-4 flex items-center gap-2">
-                <Palette className="h-4 w-4 text-primary-green" />
-                Aesthetic Theme
-              </h4>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { id: 'dark-teal', label: 'Vascular Teal', bg: 'bg-white', border: 'border-primary-green' },
-                  { id: 'dark-emerald', label: 'Forest Green', bg: 'bg-white', border: 'border-primary-green' }
-                ].map((th) => (
-                  <button
-                    key={th.id}
-                    id={`settings-theme-btn-${th.id}`}
-                    onClick={() => setActiveTheme(th.id)}
-                    className={`p-3 rounded-2xl border text-xs text-left cursor-pointer transition-all ${
-                      activeTheme === th.id 
-                        ? `bg-white text-primary-text ${th.border} ring-1 ring-light-green` 
-                        : 'bg-white/40 text-secondary-text border-border-gray hover:bg-secondary-bg'
-                    }`}
-                  >
-                    <div className="font-semibold">{th.label}</div>
-                    <div className="text-[9px] text-secondary-text mt-1">Dark mode active</div>
-                  </button>
-                ))}
-              </div>
-            </motion.div>
           </div>
 
           {/* Right Panel: Interactive Forms */}
-          <div className="lg:col-span-2 space-y-4 min-w-0">
+          <div className="xl:col-span-2 space-y-4 min-w-0">
             
             {/* Profile Information Block */}
             <motion.div
@@ -190,7 +176,7 @@ export default function SettingsPage() {
             >
               <div className="flex items-center gap-2 mb-6">
                 <User className="h-5 w-5 text-primary-green" />
-                <h3 className="font-bold text-primary-text text-sm">Personal Profile Configuration</h3>
+                <h3 className="font-bold text-slate-500 text-sm">Personal Profile Configuration</h3>
               </div>
 
               {profileError && (
@@ -207,10 +193,10 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              <form onSubmit={handleProfileSubmit} className="space-y-4">
+              <form onSubmit={handleProfileSubmit} className="space-y-4 max-w-full min-w-0">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-2">Display Name</label>
+                  <div className="min-w-0">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Full Name</label>
                     <input
                       id="settings-name-input"
                       type="text"
@@ -218,32 +204,101 @@ export default function SettingsPage() {
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Jane Austin"
-                      className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2.5 px-3.5 text-xs text-primary-text outline-none transition-all"
+                      className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2.5 px-3.5 text-xs text-slate-500 outline-none transition-all"
                     />
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-2">Phone Number</label>
+                  <div className="min-w-0">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Designation</label>
+                    <input
+                      type="text"
+                      disabled
+                      value={user.role}
+                      className="w-full bg-white/40 border border-border-gray cursor-not-allowed rounded-xl py-2.5 px-3.5 text-xs text-slate-500 outline-none"
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Phone Number</label>
                     <input
                       id="settings-phone-input"
                       type="tel"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       placeholder="9988776655"
-                      className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2.5 px-3.5 text-xs text-primary-text outline-none transition-all"
+                      className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2.5 px-3.5 text-xs text-slate-500 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Personal Email</label>
+                    <input
+                      id="settings-personal-email-input"
+                      type="email"
+                      value={personalEmail}
+                      onChange={(e) => setPersonalEmail(e.target.value)}
+                      placeholder="you.personal@email.com"
+                      className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2.5 px-3.5 text-xs text-slate-500 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Age</label>
+                    <input
+                      id="settings-age-input"
+                      type="number"
+                      min={18}
+                      max={100}
+                      value={age}
+                      onChange={(e) => setAge(e.target.value)}
+                      placeholder="30"
+                      className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2.5 px-3.5 text-xs text-slate-500 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Date of Birth</label>
+                    <input
+                      id="settings-dob-input"
+                      type="date"
+                      value={dateOfBirth}
+                      onChange={(e) => setDateOfBirth(e.target.value)}
+                      className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2.5 px-3.5 text-xs text-slate-500 outline-none transition-all"
+                    />
+                  </div>
+                  <div className="min-w-0 sm:col-span-2">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Gender</label>
+                    <SelectField
+                      id="settings-gender-select"
+                      value={gender}
+                      onChange={setGender}
+                      triggerClassName="py-2.5 px-3.5 text-xs"
+                      options={[
+                        { value: 'Male', label: 'Male' },
+                        { value: 'Female', label: 'Female' },
+                        { value: 'Other', label: 'Other' },
+                      ]}
                     />
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-2">Registered Email Address</label>
+                <div className="min-w-0">
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Work Email (Login)</label>
                   <input
                     id="settings-email-disabled"
                     type="email"
                     disabled
                     value={user.email}
-                    className="w-full bg-white/40 border border-border-gray cursor-not-allowed rounded-xl py-2.5 px-3.5 text-xs text-secondary-text outline-none"
+                    className="w-full bg-white/40 border border-border-gray cursor-not-allowed rounded-xl py-2.5 px-3.5 text-xs text-slate-500 outline-none"
                   />
-                  <p className="text-[10px] text-secondary-text mt-1">Emails are locked to ensure compliance with audit log regulations.</p>
+                  <p className="text-[10px] text-slate-500 mt-1">Login email is locked for audit compliance.</p>
+                </div>
+
+                <div className="min-w-0">
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">About</label>
+                  <textarea
+                    id="settings-about-input"
+                    value={about}
+                    onChange={(e) => setAbout(e.target.value)}
+                    rows={4}
+                    placeholder="Brief professional summary..."
+                    className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2.5 px-3.5 text-xs text-slate-500 outline-none transition-all resize-y min-h-[96px]"
+                  />
                 </div>
 
                 <div className="flex justify-end pt-2">
@@ -272,7 +327,7 @@ export default function SettingsPage() {
             >
               <div className="flex items-center gap-2 mb-6">
                 <Lock className="h-5 w-5 text-primary-green" />
-                <h3 className="font-bold text-primary-text text-sm">Security Credentials Update</h3>
+                <h3 className="font-bold text-slate-500 text-sm">Security Credentials Update</h3>
               </div>
 
               {passwordError && (
@@ -292,7 +347,7 @@ export default function SettingsPage() {
               <form onSubmit={handlePasswordSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="relative">
-                    <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-2">New Password</label>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">New Password</label>
                     <div className="relative">
                       <input
                         id="settings-new-password-input"
@@ -300,13 +355,13 @@ export default function SettingsPage() {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="••••••••"
-                        className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2.5 pl-3.5 pr-10 text-xs text-primary-text outline-none transition-all"
+                        className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2.5 pl-3.5 pr-10 text-xs text-slate-500 outline-none transition-all"
                       />
                       <button
                         id="settings-toggle-pwd-btn"
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-3 text-secondary-text hover:text-secondary-text cursor-pointer"
+                        className="absolute right-3 top-3 text-slate-500 hover:text-slate-500 cursor-pointer"
                       >
                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </button>
@@ -314,14 +369,14 @@ export default function SettingsPage() {
                   </div>
                   
                   <div>
-                    <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-2">Confirm New Password</label>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Confirm New Password</label>
                     <input
                       id="settings-confirm-password-input"
                       type={showPassword ? 'text' : 'password'}
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2.5 px-3.5 text-xs text-primary-text outline-none transition-all"
+                      className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2.5 px-3.5 text-xs text-slate-500 outline-none transition-all"
                     />
                   </div>
                 </div>

@@ -4,7 +4,7 @@ export const logAudit = async (
   userId: number | null,
   actionType: string,
   entityType: string,
-  entityId: number,
+  entityId: number | null,
   description: string,
   metadata?: any
 ) => {

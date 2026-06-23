@@ -71,6 +71,17 @@ export default function HospitalsPage() {
   const [isVerifyingCoords, setIsVerifyingCoords] = useState(false);
   const [previewLat, setPreviewLat] = useState<number | null>(null);
   const [previewLng, setPreviewLng] = useState<number | null>(null);
+  const [inputLat, setInputLat] = useState<string>('');
+  const [inputLng, setInputLng] = useState<string>('');
+
+  useEffect(() => {
+    setInputLat(previewLat !== null ? previewLat.toString() : '');
+  }, [previewLat]);
+
+  useEffect(() => {
+    setInputLng(previewLng !== null ? previewLng.toString() : '');
+  }, [previewLng]);
+
   const [previewStatus, setPreviewStatus] = useState('');
   const [previewWarning, setPreviewWarning] = useState('');
   const [previewError, setPreviewError] = useState('');
@@ -84,7 +95,7 @@ export default function HospitalsPage() {
   };
 
   const getInputClass = (fieldName: string, value: string) => {
-    const base = "w-full bg-white border rounded-xl py-2 px-3 text-xs text-primary-text outline-none transition-all";
+    const base = "w-full bg-white border rounded-xl py-2 px-3 text-xs text-slate-500 outline-none transition-all";
     if (touchedFields[fieldName]) {
       if (formErrors[fieldName]) {
         return `${base} border-rose-300 focus:border-rose-500 focus:ring-1 focus:ring-rose-500`;
@@ -104,11 +115,22 @@ export default function HospitalsPage() {
     }
   }, [user]);
 
+
+
+
   const fetchHospitals = async () => {
     setLoading(true);
     try {
       const res = await api.hospitals.getAll();
-      setHospitals(res.hospitals || []);
+      const uniqueHospitals: any[] = [];
+      const seenIds = new Set();
+      (res.hospitals || []).forEach((h: any) => {
+        if (!seenIds.has(h.id)) {
+          seenIds.add(h.id);
+          uniqueHospitals.push(h);
+        }
+      });
+      setHospitals(uniqueHospitals);
     } catch (e: any) {
       setError(e.message || 'Failed to fetch partner clinic networks.');
     } finally {
@@ -472,6 +494,8 @@ export default function HospitalsPage() {
       pincode,
       google_maps_link: googleMapsLink,
       allowed_radius: allowedRadius !== '' ? parseInt(allowedRadius, 10) : 200,
+      latitude: previewLat,
+      longitude: previewLng,
       hospital_type: hospitalType,
       branch_code: branchCode,
       visiting_hours: visitingHours,
@@ -552,11 +576,11 @@ export default function HospitalsPage() {
         {/* Header Block */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-lg sm:text-2xl font-bold text-primary-text flex items-center gap-2">
+            <h1 className="text-lg sm:text-2xl font-bold text-slate-500 flex items-center gap-2">
               Partner Hospitals Registry
               <Building2 className="h-5 w-5 text-primary-green" />
             </h1>
-            <p className="text-sm text-secondary-text mt-0.5">
+            <p className="text-sm text-slate-500 mt-0.5">
               Manage clinical locations, reference branches, and field geofence tracking zones.
             </p>
           </div>
@@ -590,14 +614,14 @@ export default function HospitalsPage() {
         {/* Search Panel */}
         <div className="bg-white border border-border-gray p-3 sm:p-4 rounded-xl sm:rounded-2xl">
           <div className="relative">
-            <Search className="absolute left-3 top-3 h-4.5 w-4.5 text-secondary-text" />
+            <Search className="absolute left-3 top-3 h-4.5 w-4.5 text-slate-500" />
             <input
               id="hospital-search"
               type="text"
               placeholder="Search hospitals by name, UID, city, or state..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2.5 pl-10 pr-4 text-xs text-primary-text placeholder-slate-400 outline-none transition-all"
+              className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2.5 pl-10 pr-4 text-xs text-slate-500 placeholder-slate-400 outline-none transition-all"
             />
           </div>
         </div>
@@ -610,7 +634,7 @@ export default function HospitalsPage() {
         ) : filteredHospitals.length === 0 ? (
           <div className="bg-white/60 border border-border-gray p-12 text-center rounded-2xl flex flex-col items-center justify-center">
             <Building2 className="h-10 w-10 text-slate-600 mb-3" />
-            <p className="text-secondary-text text-sm font-medium">No medical centers matched your query.</p>
+            <p className="text-slate-500 text-sm font-medium">No medical centers matched your query.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
@@ -632,7 +656,7 @@ export default function HospitalsPage() {
                           {hosp.hospital_uid || 'UID Pending'}
                         </span>
                         {hosp.branch_code && (
-                          <span className="text-[9px] bg-white text-secondary-text border border-border-gray px-1.5 py-0.5 rounded font-semibold">
+                          <span className="text-[9px] bg-white text-slate-500 border border-border-gray px-1.5 py-0.5 rounded font-semibold">
                             {hosp.branch_code}
                           </span>
                         )}
@@ -642,24 +666,24 @@ export default function HospitalsPage() {
                           </span>
                         )}
                       </div>
-                      <h3 className="font-bold text-primary-text text-sm leading-snug group-hover:text-primary-green transition-colors mt-1">
+                      <h3 className="font-bold text-slate-500 text-sm leading-snug group-hover:text-primary-green transition-colors mt-1">
                         {hosp.name}
                       </h3>
-                      <p className="text-[10px] text-secondary-text mt-0.5">
+                      <p className="text-[10px] text-slate-500 mt-0.5">
                         {hosp.hospital_type || 'Clinic'}
                       </p>
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0">
                       <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
                         hosp.status?.toUpperCase() === 'ACTIVE' ? 'bg-very-light-green text-primary-green border border-light-green/40' :
-                        hosp.status?.toUpperCase() === 'UNDER_REVIEW' ? 'bg-secondary-bg text-secondary-text border border-border-gray' :
+                        hosp.status?.toUpperCase() === 'UNDER_REVIEW' ? 'bg-secondary-bg text-slate-500 border border-border-gray' :
                         hosp.status?.toUpperCase() === 'TEMPORARILY_CLOSED' ? 'bg-orange-950 text-orange-400 border border-orange-500/20' :
                         'bg-alert-bg text-alert-text border border-alert-border'
                       }`}>
                         {hosp.status}
                       </span>
                       {hosp.temporarily_closed && (
-                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-secondary-bg text-secondary-text border border-border-gray flex items-center gap-0.5 animate-pulse">
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-secondary-bg text-slate-500 border border-border-gray flex items-center gap-0.5 animate-pulse">
                           <AlertTriangle className="h-2.5 w-2.5" />
                           Closed
                         </span>
@@ -670,19 +694,19 @@ export default function HospitalsPage() {
                   <div className="space-y-3 bg-white/60 border border-border-gray p-3 rounded-xl mb-4 text-xs">
                     {/* Location info */}
                     <div className="space-y-1">
-                      <div className="flex items-start gap-2 text-secondary-text">
-                        <MapPin className="h-3.5 w-3.5 text-secondary-text mt-0.5 shrink-0" />
+                      <div className="flex items-start gap-2 text-slate-500">
+                        <MapPin className="h-3.5 w-3.5 text-slate-500 mt-0.5 shrink-0" />
                         <div>
-                          <p className="text-secondary-text font-medium leading-normal">
+                          <p className="text-slate-500 font-medium leading-normal">
                             {hosp.address || `${hosp.city}, ${hosp.state}`}
                           </p>
                           {hosp.landmark && (
-                            <p className="text-[10px] text-secondary-text">
+                            <p className="text-[10px] text-slate-500">
                               Landmark: {hosp.landmark}
                             </p>
                           )}
                           {hosp.pincode && (
-                            <p className="text-[10px] text-secondary-text">
+                            <p className="text-[10px] text-slate-500">
                               Pincode: {hosp.pincode}
                             </p>
                           )}
@@ -690,7 +714,7 @@ export default function HospitalsPage() {
                       </div>
                       
                       {hosp.latitude && hosp.longitude && (
-                        <div className="flex items-center gap-2 pl-5.5 text-[10px] text-secondary-text">
+                        <div className="flex items-center gap-2 pl-5.5 text-[10px] text-slate-500">
                           <Globe className="h-3 w-3 text-slate-600" />
                           <span>GPS: {parseFloat(hosp.latitude).toFixed(4)}, {parseFloat(hosp.longitude).toFixed(4)}</span>
                           {hosp.google_maps_link && (
@@ -710,10 +734,10 @@ export default function HospitalsPage() {
                     {/* Contact Person info */}
                     <div className="border-t border-border-gray/60 pt-2 space-y-1">
                       {hosp.contact_person && (
-                        <div className="flex items-center gap-2 text-secondary-text">
-                          <User className="h-3.5 w-3.5 text-secondary-text shrink-0" />
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <User className="h-3.5 w-3.5 text-slate-500 shrink-0" />
                           <span>
-                            POC: <strong className="text-primary-text font-semibold">{hosp.contact_person}</strong>
+                            POC: <strong className="text-slate-500 font-semibold">{hosp.contact_person}</strong>
                           </span>
                         </div>
                       )}
@@ -728,7 +752,7 @@ export default function HospitalsPage() {
                           )}
                           {hosp.reception_phone && (
                             <div className="flex items-center gap-1">
-                              <span className="text-[9px] px-1 bg-white border border-border-gray rounded text-secondary-text">Rec</span>
+                              <span className="text-[9px] px-1 bg-white border border-border-gray rounded text-slate-500">Rec</span>
                               <span>{hosp.reception_phone}</span>
                             </div>
                           )}
@@ -738,17 +762,17 @@ export default function HospitalsPage() {
 
                     {/* Executive Assignment & Timing */}
                     {(hosp.assigned_executives_names || hosp.visit_frequency) && (
-                      <div className="border-t border-border-gray/60 pt-2 text-[10px] text-secondary-text space-y-1.5">
+                      <div className="border-t border-border-gray/60 pt-2 text-[10px] text-slate-500 space-y-1.5">
                         <div className="flex justify-between items-center">
-                          <span className="text-secondary-text font-medium">Frequency:</span>
-                          <span className="font-semibold text-secondary-text bg-white px-1.5 py-0.5 rounded border border-border-gray">
+                          <span className="text-slate-500 font-medium">Frequency:</span>
+                          <span className="font-semibold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-border-gray">
                             {hosp.visit_frequency || 'Weekly'}
                           </span>
                         </div>
                         {hosp.assigned_executives_names && (
                           <div className="flex items-start gap-1 justify-between">
-                            <span className="text-secondary-text shrink-0 font-medium">Assigned:</span>
-                            <span className="font-semibold text-secondary-text truncate max-w-[70%]" title={hosp.assigned_executives_names}>
+                            <span className="text-slate-500 shrink-0 font-medium">Assigned:</span>
+                            <span className="font-semibold text-slate-500 truncate max-w-[70%]" title={hosp.assigned_executives_names}>
                               {hosp.assigned_executives_names}
                             </span>
                           </div>
@@ -762,7 +786,7 @@ export default function HospitalsPage() {
                     <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold border ${
                       hosp.geofencing_enabled 
                         ? 'bg-very-light-green text-primary-green border-light-green/40' 
-                        : 'bg-white text-secondary-text border-border-gray'
+                        : 'bg-white text-slate-500 border-border-gray'
                     }`}>
                       Geofence: {hosp.geofencing_enabled ? `${hosp.allowed_radius || 200}m` : 'Off'}
                     </span>
@@ -770,7 +794,7 @@ export default function HospitalsPage() {
                     {hosp.geo_verification_status && (
                       <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold border ${
                         hosp.geo_verification_status === 'VERIFIED' ? 'bg-very-light-green text-primary-green border-light-green/40' :
-                        hosp.geo_verification_status === 'APPROXIMATE' ? 'bg-secondary-bg/40 text-secondary-text border-border-gray' :
+                        hosp.geo_verification_status === 'APPROXIMATE' ? 'bg-secondary-bg/40 text-slate-500 border-border-gray' :
                         'bg-alert-bg/40 text-alert-text border-alert-border'
                       }`}>
                         {hosp.geo_verification_status}
@@ -795,7 +819,7 @@ export default function HospitalsPage() {
                     <button
                       id={`btn-edit-hospital-${hosp.id}`}
                       onClick={() => handleOpenEdit(hosp)}
-                      className="p-1.5 text-secondary-text hover:text-primary-green hover:bg-very-light-green rounded-lg cursor-pointer transition-colors"
+                      className="p-1.5 text-slate-500 hover:text-primary-green hover:bg-very-light-green rounded-lg cursor-pointer transition-colors"
                       title="Edit Branch"
                     >
                       <Edit3 className="h-4 w-4" />
@@ -803,7 +827,7 @@ export default function HospitalsPage() {
                     <button
                       id={`btn-delete-hospital-${hosp.id}`}
                       onClick={() => handleDelete(hosp.id)}
-                      className="p-1.5 text-secondary-text hover:text-alert-text hover:bg-very-light-green rounded-lg cursor-pointer transition-colors"
+                      className="p-1.5 text-slate-500 hover:text-alert-text hover:bg-very-light-green rounded-lg cursor-pointer transition-colors"
                       title="Delete Branch"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -834,11 +858,11 @@ export default function HospitalsPage() {
                 className="w-full max-w-4xl bg-white border border-border-gray rounded-2xl shadow-2xl overflow-hidden z-10 flex flex-col max-h-[95vh]"
               >
                 <div className="px-6 py-4 border-b border-border-gray flex items-center justify-between shrink-0">
-                  <h3 className="font-bold text-sm text-primary-text flex items-center gap-1.5">
+                  <h3 className="font-bold text-sm text-slate-500 flex items-center gap-1.5">
                     <Sparkles className="h-4.5 w-4.5 text-primary-green" />
                     {selectedHospital ? `Edit Branch (${selectedHospital.hospital_uid})` : 'Register Partner Clinic'}
                   </h3>
-                  <button id="close-hospital-modal" onClick={() => setIsFormOpen(false)} className="text-secondary-text hover:text-primary-green cursor-pointer">
+                  <button id="close-hospital-modal" onClick={() => setIsFormOpen(false)} className="text-slate-500 hover:text-primary-green cursor-pointer">
                     <X className="h-4.5 w-4.5" />
                   </button>
                 </div>
@@ -855,7 +879,7 @@ export default function HospitalsPage() {
                       
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
-                          <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Clinic Name *</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Clinic Name *</label>
                           <input
                             id="form-hosp-name"
                             type="text"
@@ -872,7 +896,7 @@ export default function HospitalsPage() {
                         </div>
 
                         <div>
-                          <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Branch Code (Uppercase & Hyphen)</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Branch Code (Uppercase & Hyphen)</label>
                           <input
                             id="form-hosp-branch-code"
                             type="text"
@@ -888,21 +912,21 @@ export default function HospitalsPage() {
                         </div>
 
                         <div>
-                          <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Legacy Hospital ID (Reference)</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Legacy Hospital ID (Reference)</label>
                           <input
                             id="form-hosp-legacy-id"
                             type="text"
                             value={legacyHospitalId}
                             onChange={(e) => setLegacyHospitalId(e.target.value)}
                             placeholder="e.g. HSP-2026-000012"
-                            className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-primary-text outline-none transition-all"
+                            className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none transition-all"
                           />
                         </div>
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
-                          <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Hospital Type</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Hospital Type</label>
                           <SelectField
                             id="form-hosp-type"
                             value={hospitalType}
@@ -920,7 +944,7 @@ export default function HospitalsPage() {
                         </div>
 
                         <div>
-                          <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Network Status</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Network Status</label>
                           <SelectField
                             id="form-hosp-status"
                             value={status}
@@ -935,7 +959,7 @@ export default function HospitalsPage() {
                         </div>
 
                         <div>
-                          <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Visit Frequency</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Visit Frequency</label>
                           <SelectField
                             id="form-hosp-frequency"
                             value={visitFrequency}
@@ -953,7 +977,7 @@ export default function HospitalsPage() {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Visiting Hours Start Time</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Visiting Hours Start Time</label>
                           <input
                             id="form-hosp-hours-start"
                             type="time"
@@ -965,7 +989,7 @@ export default function HospitalsPage() {
                         </div>
 
                         <div>
-                          <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Visiting Hours End Time</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Visiting Hours End Time</label>
                           <input
                             id="form-hosp-hours-end"
                             type="time"
@@ -982,7 +1006,7 @@ export default function HospitalsPage() {
 
                       <div className="grid grid-cols-1 gap-4">
                         <div>
-                          <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Territory / Zone</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Territory / Zone</label>
                           <input
                             id="form-hosp-zone"
                             type="text"
@@ -1007,7 +1031,7 @@ export default function HospitalsPage() {
                       </h4>
 
                       <div>
-                        <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Full Address</label>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Full Address</label>
                         <textarea
                           id="form-hosp-address"
                           value={address}
@@ -1024,7 +1048,7 @@ export default function HospitalsPage() {
 
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
-                          <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">City *</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">City *</label>
                           <input
                             id="form-hosp-city"
                             type="text"
@@ -1041,7 +1065,7 @@ export default function HospitalsPage() {
                         </div>
 
                         <div>
-                          <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">State *</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">State *</label>
                           <input
                             id="form-hosp-state"
                             type="text"
@@ -1058,7 +1082,7 @@ export default function HospitalsPage() {
                         </div>
 
                         <div>
-                          <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Pincode</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Pincode</label>
                           <input
                             id="form-hosp-pincode"
                             type="text"
@@ -1074,7 +1098,7 @@ export default function HospitalsPage() {
                         </div>
                       </div>                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Landmark</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Landmark</label>
                           <input
                             id="form-hosp-landmark"
                             type="text"
@@ -1090,7 +1114,7 @@ export default function HospitalsPage() {
                         </div>
 
                         <div>
-                          <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Google Maps Link</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Google Maps Link</label>
                           <input
                             id="form-hosp-maps-link"
                             type="url"
@@ -1106,10 +1130,55 @@ export default function HospitalsPage() {
                         </div>
                       </div>
 
+                      {/* Manual Coordinates Input Fields */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Latitude</label>
+                          <input
+                            id="form-hosp-latitude"
+                            type="text"
+                            value={inputLat}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setInputLat(val);
+                              const parsed = parseFloat(val);
+                              if (!isNaN(parsed) && parsed >= -90 && parsed <= 90) {
+                                setPreviewLat(parsed);
+                              } else if (val === '') {
+                                setPreviewLat(null);
+                              }
+                            }}
+                            placeholder="e.g. 17.3850"
+                            className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-slate-500 placeholder-slate-400 outline-none transition-all"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Longitude</label>
+                          <input
+                            id="form-hosp-longitude"
+                            type="text"
+                            value={inputLng}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setInputLng(val);
+                              const parsed = parseFloat(val);
+                              if (!isNaN(parsed) && parsed >= -180 && parsed <= 180) {
+                                setPreviewLng(parsed);
+                              } else if (val === '') {
+                                setPreviewLng(null);
+                              }
+                            }}
+                            placeholder="e.g. 78.4860"
+                            className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-slate-500 placeholder-slate-400 outline-none transition-all"
+                          />
+                        </div>
+                      </div>
+
                       {/* Verify Button and Radius */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                         <div>
-                          <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Allowed Radius (meters)</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Allowed Radius (meters)</label>
                           <input
                             id="form-hosp-radius"
                             type="number"
@@ -1132,7 +1201,7 @@ export default function HospitalsPage() {
                             className="w-full flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold text-primary-green bg-very-light-green hover:bg-very-light-green/60 border border-emerald-500/30 rounded-xl cursor-pointer transition-all disabled:opacity-50"
                           >
                             <Compass className={`h-4 w-4 ${isVerifyingCoords ? 'animate-spin' : ''}`} />
-                            {isVerifyingCoords ? 'Resolving Coordinates...' : 'Verify Coordinates'}
+                            {isVerifyingCoords ? 'Resolving Coordinates...' : 'Verify Location'}
                           </button>
                         </div>
                       </div>
@@ -1141,11 +1210,11 @@ export default function HospitalsPage() {
                       {(previewLat !== null || previewError || previewWarning) && (
                         <div className="bg-white/80 border border-border-gray rounded-xl p-4 space-y-3">
                           <div className="flex items-center justify-between">
-                            <h5 className="text-[10px] font-bold text-secondary-text uppercase tracking-wider">Location Verification Status</h5>
+                            <h5 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Location Verification Status</h5>
                             {previewStatus && (
                               <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${
                                 previewStatus === 'VERIFIED' ? 'bg-very-light-green text-primary-green border-light-green/40' :
-                                previewStatus === 'APPROXIMATE' ? 'bg-secondary-bg text-secondary-text border-border-gray' :
+                                previewStatus === 'APPROXIMATE' ? 'bg-secondary-bg text-slate-500 border-border-gray' :
                                 'bg-alert-bg text-alert-text border-alert-border'
                               }`}>
                                 {previewStatus}
@@ -1161,7 +1230,7 @@ export default function HospitalsPage() {
                           )}
 
                           {previewWarning && (
-                            <div className="p-2.5 rounded-lg bg-secondary-bg/20 border border-amber-500/10 text-[10px] text-secondary-text flex items-start gap-1.5">
+                            <div className="p-2.5 rounded-lg bg-secondary-bg/20 border border-amber-500/10 text-[10px] text-slate-500 flex items-start gap-1.5">
                               <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                               <span className="font-medium leading-normal">{previewWarning}</span>
                             </div>
@@ -1172,15 +1241,15 @@ export default function HospitalsPage() {
                               {/* Resolved coordinates info */}
                               <div className="space-y-2 text-xs">
                                 <div className="bg-white border border-border-gray p-2.5 rounded-lg space-y-1">
-                                  <span className="text-[9px] font-bold text-secondary-text uppercase tracking-wider block">Resolved Coordinates</span>
-                                  <div className="font-mono text-secondary-text flex flex-col">
+                                  <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Resolved Coordinates</span>
+                                  <div className="font-mono text-slate-500 flex flex-col">
                                     <span>Latitude: {previewLat.toFixed(6)}</span>
                                     <span>Longitude: {previewLng.toFixed(6)}</span>
                                   </div>
                                 </div>
                                 <div className="bg-white border border-border-gray p-2.5 rounded-lg space-y-1">
-                                  <span className="text-[9px] font-bold text-secondary-text uppercase tracking-wider block">Target Address Reference</span>
-                                  <p className="text-secondary-text leading-snug line-clamp-2">{address || 'No address specified'}</p>
+                                  <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Target Address Reference</span>
+                                  <p className="text-slate-500 leading-snug line-clamp-2">{address || 'No address specified'}</p>
                                 </div>
                               </div>
 
@@ -1205,7 +1274,7 @@ export default function HospitalsPage() {
                                   <div className="h-1.5 w-1.5 bg-primary-green rounded-full scale-y-50 opacity-80" />
                                 </div>
 
-                                <div className="absolute bottom-1 right-2 text-[8px] font-mono text-secondary-text bg-white/80 px-1 rounded">
+                                <div className="absolute bottom-1 right-2 text-[8px] font-mono text-slate-500 bg-white/80 px-1 rounded">
                                   Scale: ~{allowedRadius || 200}m
                                 </div>
                               </div>
@@ -1216,10 +1285,10 @@ export default function HospitalsPage() {
 
                       {/* Geo-Verification Toggle Checkboxes */}
                       <div className="bg-white/60 border border-border-gray p-4 rounded-xl space-y-3">
-                        <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-2">Geo-Verification Settings</label>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Geo-Verification Settings</label>
                         
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                          <label className="flex items-center gap-2 text-xs text-secondary-text cursor-pointer">
+                          <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
                             <input
                               type="checkbox"
                               checked={geofencingEnabled}
@@ -1229,7 +1298,7 @@ export default function HospitalsPage() {
                             <span>Enable Geo-Fencing</span>
                           </label>
 
-                          <label className="flex items-center gap-2 text-xs text-secondary-text cursor-pointer">
+                          <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
                             <input
                               type="checkbox"
                               checked={requireGpsValidation}
@@ -1239,7 +1308,7 @@ export default function HospitalsPage() {
                             <span>Require GPS Validation</span>
                           </label>
 
-                          <label className="flex items-center gap-2 text-xs text-secondary-text cursor-pointer">
+                          <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
                             <input
                               type="checkbox"
                               checked={requireLivePhoto}
@@ -1249,7 +1318,7 @@ export default function HospitalsPage() {
                             <span>Require Live Photo</span>
                           </label>
 
-                          <label className="flex items-center gap-2 text-xs text-secondary-text cursor-pointer">
+                          <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
                             <input
                               type="checkbox"
                               checked={requireCheckout}
@@ -1259,7 +1328,7 @@ export default function HospitalsPage() {
                             <span>Require Check-Out</span>
                           </label>
 
-                          <label className="flex items-center gap-2 text-xs text-secondary-text cursor-pointer">
+                          <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
                             <input
                               type="checkbox"
                               checked={allowRemoteCompletion}
@@ -1276,7 +1345,7 @@ export default function HospitalsPage() {
                               onChange={(e) => setTemporarilyClosed(e.target.checked)}
                               className="rounded border-border-gray text-primary-green focus:ring-light-green bg-white h-4 w-4"
                             />
-                            <span className="text-secondary-text font-medium">Temporarily Closed</span>
+                            <span className="text-slate-500 font-medium">Temporarily Closed</span>
                           </label>
                         </div>
                       </div>
@@ -1291,7 +1360,7 @@ export default function HospitalsPage() {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Primary POC Name</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Primary POC Name</label>
                           <input
                             id="form-hosp-poc"
                             type="text"
@@ -1307,7 +1376,7 @@ export default function HospitalsPage() {
                         </div>
 
                         <div>
-                          <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Primary Contact Number</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Primary Contact Number</label>
                           <input
                             id="form-hosp-phone"
                             type="tel"
@@ -1325,7 +1394,7 @@ export default function HospitalsPage() {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Reception Contact Number</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Reception Contact Number</label>
                           <input
                             id="form-hosp-reception"
                             type="tel"
@@ -1341,7 +1410,7 @@ export default function HospitalsPage() {
                         </div>
 
                         <div>
-                          <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Alternate Contact Number</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Alternate Contact Number</label>
                           <input
                             id="form-hosp-alternate"
                             type="tel"
@@ -1359,7 +1428,7 @@ export default function HospitalsPage() {
 
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="md:col-span-2">
-                          <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Email Address</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Email Address</label>
                           <input
                             id="form-hosp-email"
                             type="email"
@@ -1375,7 +1444,7 @@ export default function HospitalsPage() {
                         </div>
 
                         <div>
-                          <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Department</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Department</label>
                           <input
                             id="form-hosp-department"
                             type="text"
@@ -1393,7 +1462,7 @@ export default function HospitalsPage() {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Hospital Admin Name</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Hospital Admin Name</label>
                           <input
                             id="form-hosp-admin"
                             type="text"
@@ -1409,17 +1478,17 @@ export default function HospitalsPage() {
                         </div>
 
                         <div className="relative min-w-0 max-w-full">
-                          <label className="block text-[10px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Assigned Executives *</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Assigned Executives *</label>
                           
                           {/* Dropdown Button */}
                           <div
                             id="form-hosp-executives-select"
                             onClick={() => setIsExecDropdownOpen(!isExecDropdownOpen)}
-                            className="w-full bg-white border border-border-gray focus-within:border-emerald-500 rounded-xl py-2 px-3 text-xs text-primary-text outline-none flex items-center justify-between cursor-pointer min-h-[38px]"
+                            className="w-full bg-white border border-border-gray focus-within:border-emerald-500 rounded-xl py-2 px-3 text-xs text-slate-500 outline-none flex items-center justify-between cursor-pointer min-h-[38px]"
                           >
                             <div className="flex flex-wrap gap-1">
                               {selectedExecIds.length === 0 ? (
-                                <span className="text-secondary-text">Select Executives...</span>
+                                <span className="text-slate-500">Select Executives...</span>
                               ) : (
                                 selectedExecIds.map(id => {
                                   const exec = executives.find(e => e.id === id);
@@ -1441,7 +1510,7 @@ export default function HospitalsPage() {
                                 })
                               )}
                             </div>
-                            <span className="text-secondary-text">▼</span>
+                            <span className="text-slate-500">▼</span>
                           </div>
 
                           {/* Dropdown Options */}
@@ -1453,7 +1522,7 @@ export default function HospitalsPage() {
                                 value={execSearchQuery}
                                 onChange={(e) => setExecSearchQuery(e.target.value)}
                                 onClick={(e) => e.stopPropagation()}
-                                className="w-full bg-white border border-border-gray focus:border-primary-green rounded-lg py-1.5 px-2.5 text-xs text-primary-text outline-none"
+                                className="w-full bg-white border border-border-gray focus:border-primary-green rounded-lg py-1.5 px-2.5 text-xs text-slate-500 outline-none"
                               />
                               <div className="max-h-36 overflow-y-auto space-y-1">
                                 {executives
@@ -1472,7 +1541,7 @@ export default function HospitalsPage() {
                                           }
                                         }}
                                         className={`flex items-center justify-between p-2 rounded-lg text-xs cursor-pointer ${
-                                          isSelected ? 'bg-very-light-green text-primary-green font-semibold' : 'text-secondary-text hover:bg-white'
+                                          isSelected ? 'bg-very-light-green text-primary-green font-semibold' : 'text-slate-500 hover:bg-white'
                                         }`}
                                       >
                                         <span>{exec.name} ({exec.email})</span>
@@ -1481,7 +1550,7 @@ export default function HospitalsPage() {
                                     );
                                   })}
                                 {executives.length === 0 && (
-                                  <p className="text-[10px] text-secondary-text p-2">No active executives found.</p>
+                                  <p className="text-[10px] text-slate-500 p-2">No active executives found.</p>
                                 )}
                               </div>
                             </div>
@@ -1497,7 +1566,7 @@ export default function HospitalsPage() {
                       id="btn-cancel-hosp"
                       type="button"
                       onClick={() => setIsFormOpen(false)}
-                      className="px-4 py-2 border border-border-gray hover:bg-secondary-bg text-xs text-secondary-text rounded-xl transition-all cursor-pointer font-semibold"
+                      className="px-4 py-2 border border-border-gray hover:bg-secondary-bg text-xs text-slate-500 rounded-xl transition-all cursor-pointer font-semibold"
                     >
                       Cancel
                     </button>

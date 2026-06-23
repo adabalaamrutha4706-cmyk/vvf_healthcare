@@ -10,6 +10,8 @@ import {
   Search, Users, RefreshCw, Filter
 } from 'lucide-react';
 import { SelectField } from '../../components/SelectField';
+import { ReportFilterPanel } from '../../components/ReportFilterPanel';
+import { exportToExcel, exportToPDF } from '../../lib/exportUtils';
 
 export default function AttendancePage() {
   const { user, isPunchedIn, activePunchRecord } = useAuth();
@@ -33,10 +35,26 @@ export default function AttendancePage() {
   const [search, setSearch] = useState('');
   const [filterRole, setFilterRole] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [selectedHospitalFilter, setSelectedHospitalFilter] = useState('All');
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
   const [filterLateOnly, setFilterLateOnly] = useState(false);
   const [showFiltersMobile, setShowFiltersMobile] = useState(false);
+  const [hospitals, setHospitals] = useState<any[]>([]);
+
+  // Load hospitals on mount
+  useEffect(() => {
+    if (!user) return;
+    const fetchHospitals = async () => {
+      try {
+        const res = await api.hospitals.getAll();
+        setHospitals(res.hospitals || []);
+      } catch (err) {
+        console.error('Failed to load hospitals list:', err);
+      }
+    };
+    fetchHospitals();
+  }, [user]);
 
   // Aggregated counts from backend
   const [activeCount, setActiveCount] = useState(0);
@@ -47,7 +65,7 @@ export default function AttendancePage() {
   useEffect(() => {
     if (!user) return;
     fetchAttendance(false);
-  }, [page, search, filterRole, filterStatus, filterStartDate, filterEndDate, filterLateOnly, isPunchedIn, user]);
+  }, [page, search, filterRole, filterStatus, selectedHospitalFilter, filterStartDate, filterEndDate, filterLateOnly, isPunchedIn, user]);
 
   // Real-time silent refresh every 10 seconds
   useEffect(() => {
@@ -56,7 +74,7 @@ export default function AttendancePage() {
       fetchAttendance(true);
     }, 10000);
     return () => clearInterval(interval);
-  }, [page, search, filterRole, filterStatus, filterStartDate, filterEndDate, filterLateOnly, isPunchedIn, user]);
+  }, [page, search, filterRole, filterStatus, selectedHospitalFilter, filterStartDate, filterEndDate, filterLateOnly, isPunchedIn, user]);
 
   // Live timer for active session
   useEffect(() => {
@@ -94,8 +112,9 @@ export default function AttendancePage() {
         search: user?.role === 'Admin' ? search : undefined,
         role: user?.role === 'Admin' ? filterRole : undefined,
         status: user?.role === 'Admin' ? filterStatus : undefined,
-        startDate: user?.role === 'Admin' ? filterStartDate : undefined,
-        endDate: user?.role === 'Admin' ? filterEndDate : undefined,
+        hospital_id: selectedHospitalFilter === 'All' ? undefined : selectedHospitalFilter,
+        startDate: filterStartDate,
+        endDate: filterEndDate,
         lateOnly: user?.role === 'Admin' ? filterLateOnly : undefined,
         page,
         limit
@@ -113,6 +132,122 @@ export default function AttendancePage() {
     }
   };
 
+  const handleDownloadPDF = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.auth.getAttendance({
+        search: user?.role === 'Admin' ? search : undefined,
+        role: user?.role === 'Admin' ? filterRole : undefined,
+        status: user?.role === 'Admin' ? filterStatus : undefined,
+        hospital_id: selectedHospitalFilter === 'All' ? undefined : selectedHospitalFilter,
+        startDate: filterStartDate,
+        endDate: filterEndDate,
+        lateOnly: user?.role === 'Admin' ? filterLateOnly : undefined,
+        page: 1,
+        limit: 100000
+      });
+      const attendanceList = res.records || [];
+
+      const headers = ['Employee Name', 'Employee ID', 'Check-In Time', 'Check-Out Time', 'Attendance Status', 'Date'];
+      const body = attendanceList.map((r: any) => {
+        const inTime = new Date(r.punch_in).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+        const outTime = r.punch_out 
+          ? new Date(r.punch_out).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) 
+          : 'Active Session';
+        const dateStr = new Date(r.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        
+        return [
+          r.user_name,
+          r.user_id,
+          inTime,
+          outTime,
+          r.status === 'active' || !r.punch_out ? 'Active' : 'Completed',
+          dateStr
+        ];
+      });
+
+      const hospitalName = selectedHospitalFilter === 'All' 
+        ? 'All Hospitals' 
+        : (hospitals.find(h => String(h.id) === selectedHospitalFilter)?.name || 'Selected Hospital');
+
+      const formattedStartDate = filterStartDate ? new Date(filterStartDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
+      const formattedEndDate = filterEndDate ? new Date(filterEndDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
+
+      exportToPDF(
+        headers,
+        body,
+        'Attendance Timesheet Report',
+        `Hospital: ${hospitalName} | Date Range: ${formattedStartDate} to ${formattedEndDate} | Search Query: "${search || 'None'}" | Total Records: ${attendanceList.length}`,
+        `attendance_report_${filterStartDate || 'all'}_to_${filterEndDate || 'all'}`
+      );
+    } catch (err: any) {
+      setError(err.message || 'Failed to generate PDF report.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDownloadExcel = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.auth.getAttendance({
+        search: user?.role === 'Admin' ? search : undefined,
+        role: user?.role === 'Admin' ? filterRole : undefined,
+        status: user?.role === 'Admin' ? filterStatus : undefined,
+        hospital_id: selectedHospitalFilter === 'All' ? undefined : selectedHospitalFilter,
+        startDate: filterStartDate,
+        endDate: filterEndDate,
+        lateOnly: user?.role === 'Admin' ? filterLateOnly : undefined,
+        page: 1,
+        limit: 100000
+      });
+      const attendanceList = res.records || [];
+
+      const data = attendanceList.map((r: any) => {
+        const inTime = new Date(r.punch_in).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+        const outTime = r.punch_out 
+          ? new Date(r.punch_out).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) 
+          : 'Active Session';
+        
+        return {
+          'Employee Name': r.user_name,
+          'Employee ID': r.user_id,
+          'Check-In Time': inTime,
+          'Check-Out Time': outTime,
+          'Attendance Status': r.status === 'active' || !r.punch_out ? 'Active' : 'Completed',
+          'Date': r.date
+        };
+      });
+
+      const hospitalName = selectedHospitalFilter === 'All' 
+        ? 'All Hospitals' 
+        : (hospitals.find(h => String(h.id) === selectedHospitalFilter)?.name || 'Selected Hospital');
+
+      const formattedStartDate = filterStartDate ? new Date(filterStartDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
+      const formattedEndDate = filterEndDate ? new Date(filterEndDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
+
+      exportToExcel(
+        data, 
+        `attendance_report_${filterStartDate || 'all'}_to_${filterEndDate || 'all'}`,
+        {
+          title: 'Attendance Timesheet Report',
+          filters: {
+            'Selected Hospital': hospitalName,
+            'Start Date': formattedStartDate,
+            'End Date': formattedEndDate,
+            'Search Query': search || 'None'
+          }
+        }
+      );
+    } catch (err: any) {
+      setError(err.message || 'Failed to generate Excel report.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Calculate stats for personal view
   const personalTotalShifts = records.length;
   const personalTotalMinutes = records.reduce((acc, r) => acc + (r.duration_minutes || 0), 0);
@@ -125,11 +260,11 @@ export default function AttendancePage() {
         {/* Header Block */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-primary-text flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-500 flex items-center gap-2">
               {user?.role === 'Admin' ? 'Global Shift Activity Monitor' : 'Work Shift Attendance Logs'}
               <Clock className="h-5 w-5 text-primary-green" />
             </h1>
-            <p className="text-xs sm:text-sm text-secondary-text mt-0.5">
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
               {user?.role === 'Admin' 
                 ? 'Centralized monitoring panel to track active sessions, verify punch times, and track team shifts.' 
                 : 'Verify punched shifts, monitor active work sessions, and record duration.'}
@@ -152,7 +287,7 @@ export default function AttendancePage() {
           </div>
         )}
         {success && (
-          <div className="p-4 rounded-xl bg-very-light-green border border-light-green/50 text-xs text-primary-text flex items-center gap-2">
+          <div className="p-4 rounded-xl bg-very-light-green border border-light-green/50 text-xs text-slate-500 flex items-center gap-2">
             <CheckCircle className="h-4.5 w-4.5" />
             {success}
           </div>
@@ -168,8 +303,8 @@ export default function AttendancePage() {
                   <Calendar className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-secondary-text">Total Shift Logs (Org)</p>
-                  <h3 className="text-lg sm:text-xl font-bold text-primary-text mt-0.5">{total}</h3>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Total Shift Logs (Org)</p>
+                  <h3 className="text-lg sm:text-xl font-bold text-slate-500 mt-0.5">{total}</h3>
                 </div>
               </div>
 
@@ -179,7 +314,7 @@ export default function AttendancePage() {
                   <Clock className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-secondary-text">Live Active Sessions</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Live Active Sessions</p>
                   <div className="flex items-center gap-2 mt-0.5">
                     <h3 className="text-lg sm:text-xl font-bold text-primary-green">{activeCount}</h3>
                     {activeCount > 0 && (
@@ -198,7 +333,7 @@ export default function AttendancePage() {
                   <Clock className="h-5 w-5 text-alert-text" />
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-secondary-text">Late Logins (Total)</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Late Logins (Total)</p>
                   <h3 className="text-lg sm:text-xl font-bold text-alert-text mt-0.5">{lateCount}</h3>
                 </div>
               </div>
@@ -211,8 +346,8 @@ export default function AttendancePage() {
                   <Calendar className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-secondary-text">Total Shifts Logged</p>
-                  <h3 className="text-lg sm:text-xl font-bold text-primary-text mt-0.5">{personalTotalShifts}</h3>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Total Shifts Logged</p>
+                  <h3 className="text-lg sm:text-xl font-bold text-slate-500 mt-0.5">{personalTotalShifts}</h3>
                 </div>
               </div>
 
@@ -222,7 +357,7 @@ export default function AttendancePage() {
                   <TrendingUp className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-secondary-text">Total Work Duration</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Total Work Duration</p>
                   <h3 className="text-lg sm:text-xl font-bold text-primary-green mt-0.5">{personalTotalHoursStr} Hours</h3>
                 </div>
               </div>
@@ -236,7 +371,7 @@ export default function AttendancePage() {
                   <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
                     isPunchedIn 
                       ? 'bg-very-light-green text-primary-green border-light-green' 
-                      : 'bg-secondary-bg text-secondary-text border-border-gray'
+                      : 'bg-secondary-bg text-slate-500 border-border-gray'
                   }`}>
                     {isPunchedIn ? (
                       <>
@@ -251,13 +386,13 @@ export default function AttendancePage() {
                 
                 <div className="flex items-end justify-between mt-1">
                   <div>
-                    <p className="text-[9px] text-secondary-text uppercase tracking-wider font-bold">Live Session Time</p>
-                    <p className="text-base sm:text-lg font-mono font-bold text-primary-text mt-0.5">
+                    <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Live Session Time</p>
+                    <p className="text-base sm:text-lg font-mono font-bold text-slate-500 mt-0.5">
                       {isPunchedIn ? formatElapsed(elapsedSeconds) : '00:00:00'}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-[9px] text-secondary-text uppercase tracking-wider font-bold">Login Timestamp</p>
+                    <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Login Timestamp</p>
                     <p className="text-xs font-bold text-primary-green mt-1">
                       {isPunchedIn && activePunchRecord?.punch_in
                         ? new Date(activePunchRecord.punch_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -274,7 +409,7 @@ export default function AttendancePage() {
         {user?.role === 'Admin' && (
           <div className="bg-white border border-border-gray rounded-xl p-3 sm:p-5 space-y-4 shadow-sm">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold text-primary-text uppercase tracking-wider flex items-center gap-1.5">
+              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                 <Filter className="h-3.5 w-3.5 text-primary-green" />
                 Live Activity Filters
               </h3>
@@ -290,88 +425,84 @@ export default function AttendancePage() {
                     setSearch('');
                     setFilterRole('');
                     setFilterStatus('');
+                    setSelectedHospitalFilter('All');
                     setFilterStartDate('');
                     setFilterEndDate('');
                     setFilterLateOnly(false);
                     setPage(1);
                   }}
-                  className="text-[10px] text-secondary-text hover:text-primary-green font-bold hover:underline transition-colors cursor-pointer"
+                  className="text-[10px] text-slate-500 hover:text-primary-green font-bold hover:underline transition-colors cursor-pointer"
                 >
                   Reset
                 </button>
               </div>
             </div>
             
-            <div className={`${showFiltersMobile ? 'grid' : 'hidden sm:grid'} grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4`}>
-              {/* Search */}
-              <div className="sm:col-span-2">
-                <label className="block text-[9px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Search Employee</label>
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-secondary-text/60" />
-                  <input
-                    type="text"
-                    placeholder="Name, email, or user ID..."
-                    value={search}
-                    onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                    className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 pl-8 pr-3 text-xs text-secondary-text outline-none placeholder-slate-400 transition-all"
+            <div className={`${showFiltersMobile ? 'flex' : 'hidden sm:flex'} flex-col gap-3`}>
+              <div className="flex flex-col md:flex-row gap-3">
+                <div className="flex-1">
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Search Employee</label>
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-500" />
+                    <input
+                      type="text"
+                      placeholder="Name, email, or user ID..."
+                      value={search}
+                      onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                      className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 pl-8 pr-3 text-xs text-slate-500 outline-none placeholder-slate-400 transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="w-full md:w-64 font-medium">
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Select Hospital</label>
+                  <SelectField
+                    id="hospital-filter"
+                    value={selectedHospitalFilter}
+                    onChange={(value) => { setSelectedHospitalFilter(value); setPage(1); }}
+                    triggerClassName="py-2 text-xs text-slate-500"
+                    options={[
+                      { value: 'All', label: 'All Hospitals' },
+                      ...hospitals.map((h) => ({ value: String(h.id), label: h.name }))
+                    ]}
                   />
                 </div>
               </div>
 
-              {/* Role Select */}
-              <div className="min-w-0">
-                <label className="block text-[9px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Role Permission</label>
-                <SelectField
-                  value={filterRole}
-                  onChange={(value) => { setFilterRole(value); setPage(1); }}
-                  triggerClassName="py-2 text-xs text-secondary-text"
-                  options={[
-                    { value: '', label: 'All Roles' },
-                    { value: 'Admin', label: 'Admin' },
-                    { value: 'Chief Doctor', label: 'Chief Doctor' },
-                    { value: 'Doctor', label: 'Doctor' },
-                    { value: 'Reception', label: 'Reception' },
-                    { value: 'Telecaller', label: 'Telecaller' },
-                    { value: 'Executive', label: 'Executive' },
-                  ]}
-                />
-              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Role Select */}
+                <div className="min-w-0">
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Role Permission</label>
+                  <SelectField
+                    value={filterRole}
+                    onChange={(value) => { setFilterRole(value); setPage(1); }}
+                    triggerClassName="py-2 text-xs text-slate-500"
+                    options={[
+                      { value: '', label: 'All Roles' },
+                      { value: 'Admin', label: 'Admin' },
+                      { value: 'Dental Doctor', label: 'Dental Doctor' },
+                      { value: 'Doctor', label: 'Doctor' },
+                      { value: 'Reception', label: 'Reception' },
+                      { value: 'Telecaller', label: 'Telecaller' },
+                      { value: 'Executive', label: 'Executive' },
+                    ]}
+                  />
+                </div>
 
-              {/* Status Select */}
-              <div className="min-w-0">
-                <label className="block text-[9px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Session Status</label>
-                <SelectField
-                  value={filterStatus}
-                  onChange={(value) => { setFilterStatus(value); setPage(1); }}
-                  triggerClassName="py-2 text-xs text-secondary-text"
-                  options={[
-                    { value: '', label: 'All Statuses' },
-                    { value: 'active', label: 'Active/Online' },
-                    { value: 'completed', label: 'Completed' },
-                  ]}
-                />
-              </div>
-
-              {/* Start Date */}
-              <div>
-                <label className="block text-[9px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">Start Date</label>
-                <input
-                  type="date"
-                  value={filterStartDate}
-                  onChange={(e) => { setFilterStartDate(e.target.value); setPage(1); }}
-                  className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-secondary-text outline-none transition-all cursor-pointer"
-                />
-              </div>
-
-              {/* End Date */}
-              <div>
-                <label className="block text-[9px] font-bold text-secondary-text uppercase tracking-wider mb-1.5">End Date</label>
-                <input
-                  type="date"
-                  value={filterEndDate}
-                  onChange={(e) => { setFilterEndDate(e.target.value); setPage(1); }}
-                  className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-secondary-text outline-none transition-all cursor-pointer"
-                />
+                {/* Status Select */}
+                <div className="min-w-0">
+                  <label className="block text-[9px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Session Status</label>
+                  <SelectField
+                    value={filterStatus}
+                    onChange={(value) => { setFilterStatus(value); setPage(1); }}
+                    triggerClassName="py-2 text-xs text-slate-500"
+                    options={[
+                      { value: '', label: 'All Statuses' },
+                      { value: 'active', label: 'Active/Online' },
+                      { value: 'completed', label: 'Completed' },
+                    ]}
+                  />
+                </div>
               </div>
             </div>
 
@@ -384,7 +515,7 @@ export default function AttendancePage() {
                 onChange={(e) => { setFilterLateOnly(e.target.checked); setPage(1); }}
                 className="rounded border-border-gray text-primary-green focus:ring-light-green bg-white h-4 w-4 cursor-pointer"
               />
-              <label htmlFor="filter-late-only" className="text-xs font-semibold text-secondary-text select-none cursor-pointer flex items-center gap-1.5">
+              <label htmlFor="filter-late-only" className="text-xs font-semibold text-slate-500 select-none cursor-pointer flex items-center gap-1.5">
                 Show Late Logins Only
                 <span className="text-[9px] px-1.5 py-0.5 bg-alert-bg text-alert-text border border-alert-border rounded font-bold uppercase tracking-wider">
                   After 9:30 AM
@@ -394,11 +525,35 @@ export default function AttendancePage() {
           </div>
         )}
 
+        <ReportFilterPanel
+          onGenerate={(start, end) => {
+            setFilterStartDate(start);
+            setFilterEndDate(end);
+            setPage(1);
+          }}
+          onReset={() => {
+            setSearch('');
+            setFilterRole('');
+            setFilterStatus('');
+            setSelectedHospitalFilter('All');
+            setFilterStartDate('');
+            setFilterEndDate('');
+            setFilterLateOnly(false);
+            setPage(1);
+          }}
+          isLoading={loading}
+          totalRecords={total}
+          activeStartDate={filterStartDate}
+          activeEndDate={filterEndDate}
+          onDownloadPDF={handleDownloadPDF}
+          onDownloadExcel={handleDownloadExcel}
+        />
+
         {/* Shifts Table */}
         <div className="bg-white border border-border-gray rounded-xl overflow-hidden min-h-[300px] flex flex-col justify-between shadow-sm">
           <div>
             <div className="px-6 py-4 border-b border-border-gray bg-secondary-bg">
-              <h3 className="font-bold text-xs text-primary-text uppercase tracking-wider">
+              <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">
                 {user?.role === 'Admin' ? 'Organization Work Shift Logs' : 'Monthly Shift Timesheet'}
               </h3>
             </div>
@@ -408,15 +563,17 @@ export default function AttendancePage() {
                 <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div>
               </div>
             ) : records.length === 0 ? (
-              <div className="flex h-48 items-center justify-center text-xs text-secondary-text">
-                No shift logs found. Attendance is automatically tracked on login.
+              <div className="flex h-48 items-center justify-center text-xs text-slate-500">
+                {filterStartDate && filterEndDate 
+                  ? 'No records found for the selected date range.' 
+                  : 'No shift logs found. Attendance is automatically tracked on login.'}
               </div>
             ) : (
               <>
                 {/* Desktop/Tablet Table View (>= md screen size) */}
                 <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-xs text-left">
-                    <thead className="bg-secondary-bg text-primary-text font-semibold border-b border-border-gray uppercase text-[9px] tracking-wider">
+                    <thead className="bg-secondary-bg text-slate-500 font-semibold border-b border-border-gray uppercase text-[9px] tracking-wider">
                       <tr>
                         {user?.role === 'Admin' && (
                           <>
@@ -454,10 +611,10 @@ export default function AttendancePage() {
                         const isLate = (hours > 9) || (hours === 9 && minutes > 30);
 
                         return (
-                          <tr key={r.id} className="hover:bg-very-light-green/30 text-secondary-text transition-colors">
+                          <tr key={r.id} className="hover:bg-very-light-green/30 text-slate-500 transition-colors">
                             {user?.role === 'Admin' && (
                               <>
-                                <td className="px-5 py-4 font-bold text-primary-text">{r.user_name}</td>
+                                <td className="px-5 py-4 font-bold text-slate-500">{r.user_name}</td>
                                 <td className="px-5 py-4">
                                   <span className="text-[10px] text-primary-green font-bold uppercase tracking-wider bg-very-light-green border border-light-green/45 px-2 py-0.5 rounded">
                                     {r.user_role}
@@ -465,16 +622,16 @@ export default function AttendancePage() {
                                 </td>
                               </>
                             )}
-                            <td className="px-5 py-4 font-bold text-secondary-text">{dateStr}</td>
+                            <td className="px-5 py-4 font-bold text-slate-500">{dateStr}</td>
                             <td className="px-5 py-4 text-primary-green font-semibold">{inTime}</td>
-                            <td className="px-5 py-4 text-secondary-text/85">{outTime}</td>
+                            <td className="px-5 py-4 text-slate-500">{outTime}</td>
                             <td className="px-5 py-4">
                               <div className="flex flex-col items-start gap-1">
                                 <div className="flex flex-wrap items-center gap-1.5">
                                   <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                                     r.status === 'active' || !r.punch_out
                                       ? 'bg-very-light-green text-primary-green border border-light-green'
-                                      : 'bg-secondary-bg text-secondary-text border border-border-gray'
+                                      : 'bg-secondary-bg text-slate-500 border border-border-gray'
                                   }`}>
                                     {r.status === 'active' || !r.punch_out ? 'Active' : 'Completed'}
                                   </span>
@@ -489,9 +646,9 @@ export default function AttendancePage() {
                                 )}
                               </div>
                             </td>
-                            <td className="px-5 py-4 text-secondary-text font-medium max-w-[150px] truncate" title={r.device_info}>
+                            <td className="px-5 py-4 text-slate-500 font-medium max-w-[150px] truncate" title={r.device_info}>
                               <span className="flex items-center gap-1.5">
-                                <Monitor className="h-3.5 w-3.5 text-secondary-text/60" />
+                                <Monitor className="h-3.5 w-3.5 text-slate-500" />
                                 {r.device_info || 'Unknown Client'}
                               </span>
                             </td>
@@ -503,7 +660,7 @@ export default function AttendancePage() {
                                 </span>
                               ) : '-'}
                             </td>
-                            <td className="px-5 py-4 text-right font-bold text-primary-text">{durationStr}</td>
+                            <td className="px-5 py-4 text-right font-bold text-slate-500">{durationStr}</td>
                           </tr>
                         );
                       })}
@@ -537,12 +694,12 @@ export default function AttendancePage() {
                         <div className="flex justify-between items-start gap-2">
                           <div>
                             {user?.role === 'Admin' ? (
-                              <h4 className="font-bold text-primary-text text-sm leading-tight">{r.user_name}</h4>
+                              <h4 className="font-bold text-slate-500 text-sm leading-tight">{r.user_name}</h4>
                             ) : (
-                              <h4 className="font-bold text-primary-text text-sm leading-tight">{dateStr}</h4>
+                              <h4 className="font-bold text-slate-500 text-sm leading-tight">{dateStr}</h4>
                             )}
                             {user?.role === 'Admin' && (
-                              <p className="text-[10px] text-secondary-text mt-0.5">{dateStr}</p>
+                              <p className="text-[10px] text-slate-500 mt-0.5">{dateStr}</p>
                             )}
                           </div>
                           
@@ -550,7 +707,7 @@ export default function AttendancePage() {
                             <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
                               r.status === 'active' || !r.punch_out
                                 ? 'bg-very-light-green text-primary-green border border-light-green'
-                                : 'bg-secondary-bg text-secondary-text border border-border-gray'
+                                : 'bg-secondary-bg text-slate-500 border border-border-gray'
                             }`}>
                               {r.status === 'active' || !r.punch_out ? 'Active' : 'Completed'}
                             </span>
@@ -564,7 +721,7 @@ export default function AttendancePage() {
 
                         {user?.role === 'Admin' && (
                           <div className="text-[10px] flex items-center gap-1.5">
-                            <span className="text-secondary-text font-semibold uppercase">Role:</span>
+                            <span className="text-slate-500 font-semibold uppercase">Role:</span>
                             <span className="text-primary-green font-bold uppercase text-[9px] bg-very-light-green border border-light-green/45 px-2 py-0.5 rounded">
                               {r.user_role}
                             </span>
@@ -573,27 +730,27 @@ export default function AttendancePage() {
 
                         <div className="grid grid-cols-2 gap-3 bg-secondary-bg border border-border-gray p-3 rounded-xl text-xs">
                           <div>
-                            <span className="text-secondary-text block text-[9px] font-bold uppercase tracking-wider">Login Time</span>
+                            <span className="text-slate-500 block text-[9px] font-bold uppercase tracking-wider">Login Time</span>
                             <span className="text-primary-green font-bold">{inTime}</span>
                           </div>
                           <div>
-                            <span className="text-secondary-text block text-[9px] font-bold uppercase tracking-wider">Logout Time</span>
-                            <span className="text-secondary-text font-semibold">{outTime}</span>
+                            <span className="text-slate-500 block text-[9px] font-bold uppercase tracking-wider">Logout Time</span>
+                            <span className="text-slate-500 font-semibold">{outTime}</span>
                           </div>
                           <div>
-                            <span className="text-secondary-text block text-[9px] font-bold uppercase tracking-wider">Session Time</span>
-                            <span className="text-primary-text font-bold font-mono">{durationStr}</span>
+                            <span className="text-slate-500 block text-[9px] font-bold uppercase tracking-wider">Session Time</span>
+                            <span className="text-slate-500 font-bold font-mono">{durationStr}</span>
                           </div>
                           <div>
-                            <span className="text-secondary-text block text-[9px] font-bold uppercase tracking-wider">GPS Coordinates</span>
-                            <span className="text-secondary-text font-medium">
+                            <span className="text-slate-500 block text-[9px] font-bold uppercase tracking-wider">GPS Coordinates</span>
+                            <span className="text-slate-500 font-medium">
                               {r.gps_latitude && r.gps_longitude ? '📍 Geotagged' : 'No Geotag'}
                             </span>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-1.5 text-[9px] text-secondary-text truncate" title={r.device_info}>
-                          <Monitor className="h-3.5 w-3.5 text-secondary-text/60 shrink-0" />
+                        <div className="flex items-center gap-1.5 text-[9px] text-slate-500 truncate" title={r.device_info}>
+                          <Monitor className="h-3.5 w-3.5 text-slate-500 shrink-0" />
                           <span className="truncate">{r.device_info || 'Unknown Client'}</span>
                         </div>
                       </div>
@@ -607,24 +764,24 @@ export default function AttendancePage() {
           {/* Pagination Controls */}
           {!loading && totalPages > 1 && (
             <div className="px-6 py-4 border-t border-border-gray bg-secondary-bg flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
-              <span className="text-secondary-text text-center sm:text-left">
-                Showing <span className="font-bold text-primary-text">{Math.min(total, (page - 1) * limit + 1)}-{Math.min(total, page * limit)}</span> of <span className="font-bold text-primary-text">{total}</span> records
+              <span className="text-slate-500 text-center sm:text-left">
+                Showing <span className="font-bold text-slate-500">{Math.min(total, (page - 1) * limit + 1)}-{Math.min(total, page * limit)}</span> of <span className="font-bold text-slate-500">{total}</span> records
               </span>
               <div className="flex items-center gap-4">
                 <button
                   disabled={page === 1}
                   onClick={() => setPage(p => Math.max(1, p - 1))}
-                  className="px-3 py-1.5 bg-white hover:bg-secondary-bg border border-border-gray text-secondary-text rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-all font-semibold cursor-pointer"
+                  className="px-3 py-1.5 bg-white hover:bg-secondary-bg border border-border-gray text-slate-500 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-all font-semibold cursor-pointer"
                 >
                   Previous
                 </button>
-                <span className="text-secondary-text select-none">
-                  Page <span className="font-bold text-primary-text">{page}</span> of <span className="font-bold text-primary-text">{totalPages}</span>
+                <span className="text-slate-500 select-none">
+                  Page <span className="font-bold text-slate-500">{page}</span> of <span className="font-bold text-slate-500">{totalPages}</span>
                 </span>
                 <button
                   disabled={page === totalPages}
                   onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  className="px-3 py-1.5 bg-white hover:bg-secondary-bg border border-border-gray text-secondary-text rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-all font-semibold cursor-pointer"
+                  className="px-3 py-1.5 bg-white hover:bg-secondary-bg border border-border-gray text-slate-500 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-all font-semibold cursor-pointer"
                 >
                   Next
                 </button>

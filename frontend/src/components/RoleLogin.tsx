@@ -7,7 +7,7 @@ import { Activity, ShieldAlert, KeyRound, Mail, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 
 interface RoleLoginProps {
-  targetRole: 'Admin' | 'Chief Doctor' | 'Doctor' | 'Executive' | 'Reception' | 'Telecaller';
+  targetRole: 'Admin' | 'Dental Doctor' | 'Doctor' | 'Executive' | 'Reception' | 'Telecaller' | 'OP Technician' | 'SOP Technician';
   icon: React.ReactNode;
 }
 
@@ -21,7 +21,7 @@ export default function RoleLogin({ targetRole, icon }: RoleLoginProps) {
 
   const getDashboardPath = (role: string) => {
     const r = role.toLowerCase().trim();
-    if (r === 'chief doctor') return '/chief-doctor/dashboard';
+    if (r === 'dental doctor') return '/dental-doctor/dashboard';
     return `/${r}/dashboard`;
   };
 
@@ -66,8 +66,8 @@ export default function RoleLogin({ targetRole, icon }: RoleLoginProps) {
     switch (targetRole) {
       case 'Admin':
         return { email: 'admin@vvf.org', pass: 'admin123', label: '💼 Admin Sandbox Log' };
-      case 'Chief Doctor':
-        return { email: 'chief@vvf.org', pass: 'chief123', label: '🏥 Chief Doctor Sandbox Log' };
+      case 'Dental Doctor':
+        return { email: 'dental@vvf.org', pass: 'dental123', label: '🦷 Dental Doctor Sandbox Log' };
       case 'Doctor':
         return { email: 'doctor@vvf.org', pass: 'doctor123', label: '🩺 Doctor Sandbox Log' };
       case 'Executive':
@@ -76,25 +76,31 @@ export default function RoleLogin({ targetRole, icon }: RoleLoginProps) {
         return { email: 'reception@vvf.org', pass: 'reception123', label: '📝 Reception Sandbox Log' };
       case 'Telecaller':
         return { email: 'telecaller@vvf.org', pass: 'telecaller123', label: '📞 Telecaller Sandbox Log' };
+      case 'OP Technician':
+        return { email: 'optech@vvf.org', pass: 'optech123', label: '🔧 OP Tech Sandbox Log' };
+      case 'SOP Technician':
+        return { email: 'soptech@vvf.org', pass: 'soptech123', label: '🔬 SOP Tech Sandbox Log' };
+      default:
+        return null;
     }
   };
 
   const demo = getDemoCredentials();
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-secondary-bg text-slate-900 relative overflow-hidden px-4">
+    <div className="min-h-screen flex items-center justify-center bg-secondary-bg text-slate-500 relative overflow-hidden px-4">
       {/* Light Theme Background Accents */}
       <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-emerald-500/5 rounded-full blur-[120px] pointer-events-none animate-pulse duration-[8000ms]" />
       <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-teal-500/5 rounded-full blur-[120px] pointer-events-none animate-pulse duration-[12000ms]" />
 
-      <div className="w-full max-w-[min(32rem,calc(100vw-2rem))] bg-white border border-slate-200 rounded-2xl shadow-2xl p-5 sm:p-8 z-10 flex flex-col items-center mobile-contained">
+      <div className="w-full max-w-[min(32rem,calc(100vw-2rem))] bg-white border text-slate-500 rounded-2xl shadow-2xl p-5 sm:p-8 z-10 flex flex-col items-center mobile-contained">
         
         {/* Brand Logo */}
         <div className="flex flex-col items-center mb-8">
           <div className="h-14 w-14 rounded-2xl bg-primary-green flex items-center justify-center shadow-lg mb-3">
             {icon}
           </div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight text-center leading-tight">
+          <h1 className="text-xl font-bold text-slate-500 tracking-tight text-center leading-tight">
             VENKATESWARA VASCULAR FOUNDATION
           </h1>
           <p className="text-xs text-primary-green font-bold uppercase tracking-wider mt-1">
@@ -125,7 +131,7 @@ export default function RoleLogin({ targetRole, icon }: RoleLoginProps) {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@vvf.org"
-                className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-xl py-3 pl-10 pr-4 text-sm text-slate-900 placeholder-slate-400 transition-all outline-none"
+                className="w-full bg-slate-50 border text-slate-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-xl py-3 pl-10 pr-4 text-sm text-slate-500 placeholder-slate-400 transition-all outline-none"
               />
             </div>
           </div>
@@ -146,7 +152,7 @@ export default function RoleLogin({ targetRole, icon }: RoleLoginProps) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-slate-50 border border-slate-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-xl py-3 pl-10 pr-4 text-sm text-slate-900 placeholder-slate-400 transition-all outline-none"
+                className="w-full bg-slate-50 border text-slate-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-xl py-3 pl-10 pr-4 text-sm text-slate-500 placeholder-slate-400 transition-all outline-none"
               />
             </div>
           </div>
@@ -178,7 +184,7 @@ export default function RoleLogin({ targetRole, icon }: RoleLoginProps) {
                 setEmail(demo.email);
                 setPassword(demo.pass);
               }}
-              className="w-full py-2.5 px-4 bg-slate-50 hover:bg-slate-100 border border-slate-200 hover:border-slate-300 rounded-xl text-slate-700 font-semibold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+              className="w-full py-2.5 px-4 bg-slate-50 hover:bg-slate-100 border text-slate-500 hover:border-slate-300 rounded-xl text-slate-700 font-semibold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
             >
               {demo.label}
             </button>

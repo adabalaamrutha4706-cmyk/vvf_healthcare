@@ -16,6 +16,9 @@ if (!useLocalDb && dbUrl) {
     connectionString: dbUrl,
     ssl: isSupabase ? { rejectUnauthorized: false } : undefined
   });
+  pool.on('error', (err) => {
+    console.error('Unexpected error on idle client:', err.message || err);
+  });
 }
 const localDbPath = path.join(__dirname, '../../data/local_db.json');
 
@@ -37,7 +40,19 @@ const initialData: Record<string, any[]> = {
   visit_photos: [],
   notifications: [],
   audit_logs: [],
-  appointment_edit_history: []
+  appointment_edit_history: [],
+  field_appointments: [],
+  auto_redistribution_log: [],
+  therapy_sessions: [],
+  therapy_hbot: [],
+  therapy_ozone: [],
+  therapy_physiotherapy: [],
+  therapy_dental: [],
+  therapy_pelvic_chair: [],
+  therapy_sipcd: [],
+  therapy_zero_gravity: [],
+  therapy_hydrogen_inhalation: [],
+  therapy_lab: []
 };
 
 
@@ -95,7 +110,7 @@ class LocalDatabase {
           this.data[table] = [];
         }
 
-        const newRow: Record<string, any> = {};
+                const newRow: Record<string, any> = {};
         
         // Find next ID
         const maxId = this.data[table].reduce((max, r) => (r.id > max ? r.id : max), 0);
@@ -103,22 +118,39 @@ class LocalDatabase {
 
         columns.forEach((col, index) => {
           const valPlaceholder = valuesPlaceholder[index];
+          let val: any;
           if (valPlaceholder.startsWith('$')) {
             const paramIdx = parseInt(valPlaceholder.substring(1), 10) - 1;
-            newRow[col] = params[paramIdx];
+            val = params[paramIdx];
           } else {
             // Literal value
-            newRow[col] = valPlaceholder.replace(/['"]/g, '');
+            val = valPlaceholder.replace(/['"]/g, '');
+            if (val === 'true') val = true;
+            if (val === 'false') val = false;
+            if (val === 'null') val = null;
           }
+          newRow[col] = val;
         });
 
-        // Set default timestamps if not provided
-        if (!newRow.created_at) newRow.created_at = new Date().toISOString();
-        if (newRow.is_deleted === undefined) newRow.is_deleted = false;
+        // Check if row with the same ID already exists
+        const idToCheck = newRow.id;
+        const existingRowIndex = this.data[table].findIndex(r => String(r.id) === String(idToCheck));
 
-        this.data[table].push(newRow);
-        this.write();
-        return { rows: [newRow] };
+        if (existingRowIndex >= 0) {
+          const existingRow = this.data[table][existingRowIndex];
+          Object.assign(existingRow, newRow);
+          existingRow.updated_at = new Date().toISOString();
+          this.write();
+          return { rows: [existingRow] };
+        } else {
+          // Set default timestamps if not provided
+          if (!newRow.created_at) newRow.created_at = new Date().toISOString();
+          if (newRow.is_deleted === undefined) newRow.is_deleted = false;
+
+          this.data[table].push(newRow);
+          this.write();
+          return { rows: [newRow] };
+        }
       }
     }
 
@@ -237,6 +269,9 @@ class LocalDatabase {
     return rows.filter(row => {
       return clauses.every(clause => {
         clause = clause.trim();
+        if (clause === '1=1' || clause.replace(/\s+/g, '') === '1=1') {
+          return true;
+        }
         
         // Handle IS NULL check
         if (/is\s+null/i.test(clause)) {
@@ -313,12 +348,49 @@ class LocalDatabase {
 
 export const localDb = new LocalDatabase();
 
+export const checkPostgresConnection = async (): Promise<boolean> => {
+  if (!pool) return false;
+  try {
+    const client = await pool.connect();
+    client.release();
+    return true;
+  } catch (err: any) {
+    console.warn('Postgres connection check failed, falling back to local database:', err.message || err);
+    try {
+      await pool.end();
+    } catch (_) {}
+    pool = null;
+    return false;
+  }
+};
+
+export const isUsingLocalDb = (): boolean => {
+  return pool === null;
+};
+
 export const query = async <T extends QueryResultRow = any>(sql: string, params?: any[]): Promise<{ rows: T[] }> => {
   if (pool) {
     try {
       return await pool.query<T>(sql, params);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Postgres query error, falling back to local file query:', e);
+      const isConnectionError = 
+        e.code === 'ENOTFOUND' || 
+        e.code === 'ECONNREFUSED' || 
+        e.code === 'ETIMEDOUT' || 
+        e.code === 'EHOSTUNREACH' ||
+        (e.message && (
+          e.message.includes('getaddrinfo') || 
+          e.message.includes('connect') ||
+          e.message.includes('timeout')
+        ));
+      if (isConnectionError) {
+        console.warn('Postgres connection failed. Disabling Postgres pool and falling back to local file database.');
+        try {
+          await pool.end();
+        } catch (_) {}
+        pool = null;
+      }
       return localDb.query(sql, params);
     }
   } else {
@@ -328,14 +400,43 @@ export const query = async <T extends QueryResultRow = any>(sql: string, params?
 
 export const withTransaction = async <T>(callback: (client: any) => Promise<T>): Promise<T> => {
   if (pool) {
-    const client = await pool.connect();
+    let client: any;
+    try {
+      client = await pool.connect();
+    } catch (err: any) {
+      console.error('Postgres transaction connection error, falling back to local database:', err);
+      const isConnectionError = 
+        err.code === 'ENOTFOUND' || 
+        err.code === 'ECONNREFUSED' || 
+        err.code === 'ETIMEDOUT' || 
+        err.code === 'EHOSTUNREACH' ||
+        (err.message && (
+          err.message.includes('getaddrinfo') || 
+          err.message.includes('connect') ||
+          err.message.includes('timeout')
+        ));
+      if (isConnectionError) {
+        console.warn('Postgres connection failed. Disabling Postgres pool and falling back to local file database.');
+        try {
+          await pool.end();
+        } catch (_) {}
+        pool = null;
+      }
+      const mockClient = {
+        query: async (sql: string, params?: any[]) => {
+          return localDb.query(sql, params);
+        }
+      };
+      return await callback(mockClient);
+    }
+
     try {
       await client.query('BEGIN');
       const result = await callback(client);
       await client.query('COMMIT');
       return result;
     } catch (err) {
-      await client.query('ROLLBACK');
+      await client.query('ROLLBACK').catch(() => {});
       throw err;
     } finally {
       client.release();
@@ -350,4 +451,5 @@ export const withTransaction = async <T>(callback: (client: any) => Promise<T>):
     return await callback(mockClient);
   }
 };
+
 

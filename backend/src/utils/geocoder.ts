@@ -76,7 +76,9 @@ export function extractCoordsFromGmapsLink(link: string): { latitude: number; lo
     /@([0-9.-]+),([0-9.-]+)/,
     /q=([0-9.-]+),([0-9.-]+)/,
     /ll=([0-9.-]+),([0-9.-]+)/,
-    /!3d([0-9.-]+)!4d([0-9.-]+)/
+    /!3d([0-9.-]+)!4d([0-9.-]+)/,
+    /search\/([0-9.-]+),\+?([0-9.-]+)/,
+    /place\/([0-9.-]+),\+?([0-9.-]+)/
   ];
   
   for (const regex of regexes) {
