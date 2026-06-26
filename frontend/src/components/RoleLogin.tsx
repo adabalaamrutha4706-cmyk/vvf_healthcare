@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
 import { Activity, ShieldAlert, KeyRound, Mail, Sparkles } from 'lucide-react';
-import Link from 'next/link';
 
 interface RoleLoginProps {
   targetRole: 'Admin' | 'Dental Doctor' | 'Doctor' | 'Executive' | 'Reception' | 'Telecaller' | 'OP Technician' | 'SOP Technician';
@@ -40,21 +39,8 @@ export default function RoleLogin({ targetRole, icon }: RoleLoginProps) {
     setLoading(true);
 
     try {
-      // Direct validation check before full context login
-      const { api } = await import('../lib/api');
-      const res = await api.auth.login({ email, password });
-      
-      const userRole = res.user.role;
-      const isAuthorized = userRole === targetRole || (targetRole === 'Admin' && userRole === 'Superadmin');
-      
-      if (!isAuthorized) {
-        setError(`Access Denied: This login portal is restricted to ${targetRole} users. Your account has the role "${userRole}".`);
-        setLoading(false);
-        return;
-      }
-
       const dashboardPath = getDashboardPath(targetRole);
-      await login({ email, password }, dashboardPath);
+      await login({ email, password }, dashboardPath, targetRole);
     } catch (err: any) {
       setError(err.message || 'Login failed. Please check credentials.');
       setLoading(false);
@@ -86,14 +72,16 @@ export default function RoleLogin({ targetRole, icon }: RoleLoginProps) {
   };
 
   const demo = getDemoCredentials();
+  const [showPassword, setShowPassword] = useState(false);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-secondary-bg text-slate-500 relative overflow-hidden px-4">
-      {/* Light Theme Background Accents */}
-      <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-emerald-500/5 rounded-full blur-[120px] pointer-events-none animate-pulse duration-[8000ms]" />
-      <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-teal-500/5 rounded-full blur-[120px] pointer-events-none animate-pulse duration-[12000ms]" />
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500 relative overflow-hidden px-4 font-sans">
+      {/* Visual background details */}
+      <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-emerald-500/5 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-teal-500/5 rounded-full blur-[120px] pointer-events-none" />
 
-      <div className="w-full max-w-[min(32rem,calc(100vw-2rem))] bg-white border text-slate-500 rounded-2xl shadow-2xl p-5 sm:p-8 z-10 flex flex-col items-center mobile-contained">
+      {/* Main card */}
+      <div className="w-full max-w-[500px] md:w-[500px] bg-white rounded-2xl shadow-xl p-8 z-10 flex flex-col items-center border border-slate-100">
         
         {/* Brand Logo */}
         <div className="flex flex-col items-center mb-8">
@@ -131,7 +119,7 @@ export default function RoleLogin({ targetRole, icon }: RoleLoginProps) {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@vvf.org"
-                className="w-full bg-slate-50 border text-slate-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-xl py-3 pl-10 pr-4 text-sm text-slate-500 placeholder-slate-400 transition-all outline-none"
+                className="w-full bg-slate-50 border border-slate-200 text-slate-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-xl py-3 pl-10 pr-4 text-sm placeholder-slate-400 transition-all outline-none"
               />
             </div>
           </div>
@@ -141,19 +129,30 @@ export default function RoleLogin({ targetRole, icon }: RoleLoginProps) {
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
                 Access Password
               </label>
-              <span className="text-xs text-slate-400 font-medium">Secure Authorization</span>
+              <span className="text-[10px] text-slate-400 font-bold tracking-wider">Secure Connection</span>
             </div>
             <div className="relative">
               <KeyRound className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
               <input
                 id="password-input"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-slate-50 border text-slate-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-xl py-3 pl-10 pr-4 text-sm text-slate-500 placeholder-slate-400 transition-all outline-none"
+                className="w-full bg-slate-50 border border-slate-200 text-slate-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-xl py-3 pl-10 pr-10 text-sm placeholder-slate-400 transition-all outline-none"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-3.5 text-slate-400 hover:text-slate-600 transition-colors bg-transparent border-none cursor-pointer outline-none p-0 flex items-center justify-center"
+              >
+                {showPassword ? (
+                  <div className="text-[10px] font-extrabold text-primary-green">HIDE</div>
+                ) : (
+                  <div className="text-[10px] font-extrabold text-slate-400 hover:text-primary-green">SHOW</div>
+                )}
+              </button>
             </div>
           </div>
 
@@ -171,10 +170,10 @@ export default function RoleLogin({ targetRole, icon }: RoleLoginProps) {
           </button>
         </form>
 
-        {/* Demo Fast Logins */}
+        {/* Sandbox Quick-Log */}
         {demo && (
           <div className="w-full mt-8 pt-6 border-t border-slate-100 flex flex-col items-center">
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-3">
+            <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-3 justify-center">
               <Sparkles className="h-3.5 w-3.5 text-emerald-600 animate-pulse" />
               <span>Developer Sandbox Quick-Fill Log</span>
             </div>
@@ -184,7 +183,7 @@ export default function RoleLogin({ targetRole, icon }: RoleLoginProps) {
                 setEmail(demo.email);
                 setPassword(demo.pass);
               }}
-              className="w-full py-2.5 px-4 bg-slate-50 hover:bg-slate-100 border text-slate-500 hover:border-slate-300 rounded-xl text-slate-700 font-semibold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+              className="w-full py-2.5 px-4 bg-slate-55 hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-slate-800 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
             >
               {demo.label}
             </button>

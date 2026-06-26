@@ -65,7 +65,13 @@ export const requireRole = (roles: string[]) => {
       return res.status(401).json({ success: false, message: 'Authentication required.', errorCode: 'AUTH_REQUIRED' });
     }
 
-    if (!roles.includes(req.user.role)) {
+    const normalizedUserRole = req.user.role.toLowerCase().replace(/\s+/g, '');
+    const hasRole = roles.some(role => {
+      const normalizedRole = role.toLowerCase().replace(/\s+/g, '');
+      return normalizedUserRole === normalizedRole;
+    });
+
+    if (!hasRole) {
       return res.status(403).json({ success: false, message: `Access denied. Requires one of roles: [${roles.join(', ')}]`, errorCode: 'ACCESS_DENIED' });
     }
 

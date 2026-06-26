@@ -920,7 +920,7 @@ function VisitsContent() {
           uniqueHospitals.push(h);
         }
       });
-      const activeHospitals = uniqueHospitals.filter((h: any) => h.status === 'Active');
+      const activeHospitals = uniqueHospitals.filter((h: any) => h.status?.toLowerCase() === 'active');
       
       // Sort active hospitals by VVF UID suffix numerically in ascending order
       activeHospitals.sort((a: any, b: any) => {

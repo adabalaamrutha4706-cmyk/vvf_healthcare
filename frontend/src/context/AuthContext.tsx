@@ -25,7 +25,7 @@ interface AuthContextType {
   loading: boolean;
   isPunchedIn: boolean;
   activePunchRecord: any | null;
-  login: (credentials: { email: string; password: string }, redirectPath?: string) => Promise<void>;
+  login: (credentials: { email: string; password: string }, redirectPath?: string, targetRole?: string) => Promise<void>;
   logout: (redirectPath?: string) => Promise<void>;
   checkPunchStatus: () => Promise<void>;
   triggerPunch: (action: 'in' | 'out', device_info?: string, gps_latitude?: number, gps_longitude?: number) => Promise<void>;
@@ -138,10 +138,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const login = async (credentials: { email: string; password: string }, redirectPath?: string) => {
+  const login = async (credentials: { email: string; password: string }, redirectPath?: string, targetRole?: string) => {
     setLoading(true);
     try {
       const res = await api.auth.login(credentials);
+
+      if (targetRole) {
+        const userRole = res.user.role;
+        const isAuthorized = userRole === targetRole || (targetRole === 'Admin' && userRole === 'Superadmin');
+        if (!isAuthorized) {
+          throw new Error(`Access Denied: This login portal is restricted to ${targetRole} users. Your account has the role "${userRole}".`);
+        }
+      }
+
       setToken(res.token);
       if (typeof window !== 'undefined') {
         localStorage.setItem('vvf_role', res.user.role);

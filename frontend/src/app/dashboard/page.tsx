@@ -18,6 +18,19 @@ export default function Dashboard() {
   const { user } = useAuth();
   const router = useRouter();
 
+  const getRolePrefix = (role: string): string => {
+    const r = role.toLowerCase().trim();
+    if (r === 'admin' || r === 'superadmin') return '/admin';
+    if (r === 'dental doctor') return '/dental-doctor';
+    if (r === 'doctor') return '/doctor';
+    if (r === 'executive') return '/executive';
+    if (r === 'reception') return '/reception';
+    if (r === 'telecaller') return '/telecaller';
+    if (r === 'op technician') return '/op-technician';
+    if (r === 'sop technician') return '/sop-technician';
+    return '';
+  };
+
   // Redirect technicians to their role-specific dashboards
   useEffect(() => {
     if (!user) return;
@@ -308,7 +321,7 @@ export default function Dashboard() {
             <div className="flex flex-wrap gap-2">
               <Link 
                 id="quick-add-field-lead"
-                href="/field-appointments"
+                href={`${getRolePrefix(user?.role || '')}/field-appointments`}
                 className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-primary-green hover:bg-primary-green-hover rounded-xl transition-all shadow-sm"
               >
                 <PlusCircle className="h-4 w-4" />

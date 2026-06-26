@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../../context/AuthContext';
-import { Activity, ShieldAlert, KeyRound, Mail, Sparkles, Eye, EyeOff } from 'lucide-react';
+import { Activity, ShieldAlert, KeyRound, Mail, Sparkles } from 'lucide-react';
 import { api } from '../../lib/api';
 
 export default function LoginPage() {
@@ -78,7 +78,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500 relative overflow-hidden px-4">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500 relative overflow-hidden px-4 font-sans">
       {/* Visual background details */}
       <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-emerald-500/5 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-teal-500/5 rounded-full blur-[120px] pointer-events-none" />
@@ -122,7 +122,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@vvf.org"
-                className="w-full bg-slate-50 border text-slate-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-xl py-3 pl-10 pr-4 text-sm text-slate-500 placeholder-slate-450 transition-all outline-none"
+                className="w-full bg-slate-50 border border-slate-200 text-slate-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-xl py-3 pl-10 pr-4 text-sm placeholder-slate-400 transition-all outline-none"
               />
             </div>
           </div>
@@ -149,14 +149,18 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-slate-50 border text-slate-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-xl py-3 pl-10 pr-10 text-sm text-slate-500 placeholder-slate-450 transition-all outline-none"
+                className="w-full bg-slate-50 border border-slate-200 text-slate-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-xl py-3 pl-10 pr-10 text-sm placeholder-slate-400 transition-all outline-none"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-3.5 text-slate-450 hover:text-slate-650 transition-colors bg-transparent border-none cursor-pointer outline-none p-0 flex items-center justify-center"
+                className="absolute right-3 top-3.5 text-slate-400 hover:text-slate-600 transition-colors bg-transparent border-none cursor-pointer outline-none p-0 flex items-center justify-center"
               >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {showPassword ? (
+                  <div className="text-[10px] font-extrabold text-primary-green">HIDE</div>
+                ) : (
+                  <div className="text-[10px] font-extrabold text-slate-400 hover:text-primary-green">SHOW</div>
+                )}
               </button>
             </div>
           </div>
@@ -185,56 +189,56 @@ export default function LoginPage() {
             <button
               id="fill-admin"
               onClick={() => fillCredentials('admin@vvf.org', 'admin123')}
-              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border text-slate-500 rounded-lg text-slate-700 font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
+              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-lg font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
             >
               💼 Admin (Full Access)
             </button>
-             <button
+            <button
               id="fill-dental"
               onClick={() => fillCredentials('dental@vvf.org', 'dental123')}
-              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border text-slate-500 rounded-lg text-slate-700 font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
+              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-lg font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
             >
               🦷 Dental Doctor
             </button>
             <button
               id="fill-doctor"
               onClick={() => fillCredentials('doctor@vvf.org', 'doctor123')}
-              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border text-slate-500 rounded-lg text-slate-700 font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
+              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-lg font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
             >
               🩺 Doctor (Clinician)
             </button>
             <button
               id="fill-reception"
               onClick={() => fillCredentials('reception@vvf.org', 'reception123')}
-              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border text-slate-500 rounded-lg text-slate-700 font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
+              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-lg font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
             >
               📝 Reception (Desk)
             </button>
             <button
               id="fill-telecaller"
               onClick={() => fillCredentials('telecaller@vvf.org', 'telecaller123')}
-              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border text-slate-500 rounded-lg text-slate-700 font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
+              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-lg font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
             >
               📞 Telecaller (Leads)
             </button>
             <button
               id="fill-executive"
               onClick={() => fillCredentials('executive@vvf.org', 'executive123')}
-              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border text-slate-500 rounded-lg text-slate-700 font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
+              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-lg font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
             >
               🏃‍♂️ Executive (Field)
             </button>
             <button
               id="fill-optech"
               onClick={() => fillCredentials('optech@vvf.org', 'optech123')}
-              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border text-slate-500 rounded-lg text-slate-700 font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
+              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-lg font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
             >
               🔧 OP Tech (Therapies)
             </button>
             <button
               id="fill-soptech"
               onClick={() => fillCredentials('soptech@vvf.org', 'soptech123')}
-              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border text-slate-500 rounded-lg text-slate-700 font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
+              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-lg font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
             >
               🔬 SOP Tech (Audit)
             </button>
@@ -298,7 +302,7 @@ export default function LoginPage() {
                       value={forgotEmail}
                       onChange={(e) => setForgotEmail(e.target.value)}
                       placeholder="name@vvf.org"
-                      className="w-full bg-slate-50 border text-slate-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-xl py-3 pl-10 pr-4 text-sm text-slate-500 outline-none transition-all"
+                      className="w-full bg-slate-50 border border-slate-200 text-slate-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-xl py-3 pl-10 pr-4 text-sm placeholder-slate-400 outline-none transition-all"
                     />
                   </div>
                 </div>
@@ -329,7 +333,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => setShowForgotModal(false)}
-              className="w-full border text-slate-500 hover:bg-slate-50 text-slate-600 font-semibold text-sm py-3 rounded-xl cursor-pointer transition-all text-center bg-white"
+              className="w-full border text-slate-500 hover:bg-slate-50 text-slate-655 font-semibold text-sm py-3 rounded-xl cursor-pointer transition-all text-center bg-white"
             >
               Close
             </button>

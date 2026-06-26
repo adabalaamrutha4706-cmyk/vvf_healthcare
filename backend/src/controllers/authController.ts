@@ -87,13 +87,12 @@ export const login = async (req: AuthenticatedRequest, res: Response) => {
 
     // Check for existing active attendance session for the user
     try {
-      const activePunch = await query(
-        "SELECT * FROM attendance WHERE user_id = $1 AND status = 'active' AND is_deleted = false LIMIT 1",
+      const activePunches = await query(
+        "SELECT * FROM attendance WHERE user_id = $1 AND status = 'active' AND is_deleted = false",
         [user.id]
       );
 
-      if (activePunch.rows.length > 0) {
-        const activeRecord = activePunch.rows[0];
+      for (const activeRecord of activePunches.rows) {
         const punchInTime = new Date(activeRecord.punch_in);
         const punchOutTime = new Date();
         const diffMs = punchOutTime.getTime() - punchInTime.getTime();
@@ -170,13 +169,12 @@ export const logout = async (req: AuthenticatedRequest, res: Response) => {
     if (req.user) {
       // Find active session
       try {
-        const activePunchResult = await query(
-          "SELECT * FROM attendance WHERE user_id = $1 AND status = 'active' AND is_deleted = false LIMIT 1",
+        const activePunches = await query(
+          "SELECT * FROM attendance WHERE user_id = $1 AND status = 'active' AND is_deleted = false",
           [req.user.id]
         );
 
-        if (activePunchResult.rows.length > 0) {
-          const activeRecord = activePunchResult.rows[0];
+        for (const activeRecord of activePunches.rows) {
           const punchInTime = new Date(activeRecord.punch_in);
           const punchOutTime = new Date();
           const diffMs = punchOutTime.getTime() - punchInTime.getTime();
@@ -222,13 +220,12 @@ export const autoLogout = async (req: AuthenticatedRequest, res: Response) => {
     if (req.user) {
       // Find active session
       try {
-        const activePunchResult = await query(
-          "SELECT * FROM attendance WHERE user_id = $1 AND status = 'active' AND is_deleted = false LIMIT 1",
+        const activePunches = await query(
+          "SELECT * FROM attendance WHERE user_id = $1 AND status = 'active' AND is_deleted = false",
           [req.user.id]
         );
 
-        if (activePunchResult.rows.length > 0) {
-          const activeRecord = activePunchResult.rows[0];
+        for (const activeRecord of activePunches.rows) {
           const punchInTime = new Date(activeRecord.punch_in);
           const punchOutTime = new Date();
           const diffMs = punchOutTime.getTime() - punchInTime.getTime();
