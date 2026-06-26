@@ -11,10 +11,10 @@ const dbUrl = process.env.DATABASE_URL;
 
 let pool: Pool | null = null;
 if (!useLocalDb && dbUrl) {
-  const isSupabase = dbUrl.includes('supabase.co') || dbUrl.includes('supabase.com') || dbUrl.includes('supabase.net') || dbUrl.includes('pooler.supabase.com');
+  const isLocalHost = dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1') || dbUrl.includes('::1');
   pool = new Pool({
     connectionString: dbUrl,
-    ssl: isSupabase ? { rejectUnauthorized: false } : undefined
+    ssl: isLocalHost ? undefined : { rejectUnauthorized: false }
   });
   pool.on('error', (err) => {
     console.error('Unexpected error on idle client:', err.message || err);
@@ -373,7 +373,6 @@ export const query = async <T extends QueryResultRow = any>(sql: string, params?
     try {
       return await pool.query<T>(sql, params);
     } catch (e: any) {
-      console.error('Postgres query error, falling back to local file query:', e);
       const isConnectionError = 
         e.code === 'ENOTFOUND' || 
         e.code === 'ECONNREFUSED' || 
@@ -385,13 +384,16 @@ export const query = async <T extends QueryResultRow = any>(sql: string, params?
           e.message.includes('timeout')
         ));
       if (isConnectionError) {
+        console.error('Postgres connection error, falling back to local file query:', e);
         console.warn('Postgres connection failed. Disabling Postgres pool and falling back to local file database.');
         try {
           await pool.end();
         } catch (_) {}
         pool = null;
+        return localDb.query(sql, params);
       }
-      return localDb.query(sql, params);
+      // If it's a syntax or schema error, throw it so the app/developer is aware instead of failing silently with empty local db returns
+      throw e;
     }
   } else {
     return localDb.query(sql, params);

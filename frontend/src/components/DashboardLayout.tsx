@@ -628,7 +628,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
                 <span>{currentTime}</span>
               </div>
               <div className="h-3.5 w-px bg-border-gray" />
-              {isPunchedIn && activePunchRecord ? (
+              {(isPunchedIn && activePunchRecord) || (user && user.role !== 'Executive') ? (
                 <div className="flex items-center text-xs">
                   <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-bold tracking-wider uppercase bg-very-light-green text-primary-green border border-light-green/35">
                     <span className="h-1.5 w-1.5 rounded-full bg-primary-green animate-ping" />
@@ -808,15 +808,17 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
         {/* Sticky Mobile Clock Widget */}
         <div className="sm:hidden flex items-center justify-between bg-white border-b border-border-gray px-4 py-1.5">
           <span className="text-[11px] font-semibold text-slate-500">Shift status:</span>
-          {isPunchedIn && activePunchRecord ? (
+          {(isPunchedIn && activePunchRecord) || (user && user.role !== 'Executive') ? (
             <div className="flex items-center gap-2">
               <span className="inline-flex items-center gap-1 bg-very-light-green text-primary-green px-2 py-0.5 rounded text-[9px] font-bold uppercase border border-light-green">
-                <span className="h-1 w-1 rounded-full bg-primary-green animate-ping" />
+                <span className="h-1.5 w-1.5 rounded-full bg-primary-green animate-ping" />
                 Active
               </span>
-              <span className="text-[9px] text-slate-500">
-                ({new Date(activePunchRecord.punch_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
-              </span>
+              {activePunchRecord && (
+                <span className="text-[9px] text-slate-500">
+                  ({new Date(activePunchRecord.punch_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
+                </span>
+              )}
             </div>
           ) : (
             <span className="text-[9px] font-bold text-alert-text bg-alert-bg px-2 py-0.5 rounded border border-alert-border">
