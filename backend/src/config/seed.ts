@@ -60,6 +60,14 @@ export const seedDatabase = async () => {
 
       // Add columns if they do not exist
       await query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_splits JSONB DEFAULT NULL;").catch(() => {});
+      await query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;").catch(() => {});
+      await query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;").catch(() => {});
+      await query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;").catch(() => {});
+      await query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS updated_by INTEGER;").catch(() => {});
+      await query("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;").catch(() => {});
+      await query("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;").catch(() => {});
+      await query("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS created_by INTEGER;").catch(() => {});
+      await query("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS updated_by INTEGER;").catch(() => {});
       await query("ALTER TABLE field_appointments ADD COLUMN IF NOT EXISTS assigned_telecaller_id INTEGER REFERENCES users(id) ON DELETE SET NULL;").catch(() => {});
       await query("ALTER TABLE field_appointments ADD COLUMN IF NOT EXISTS assigned_telecaller_name VARCHAR(255);").catch(() => {});
       await query("ALTER TABLE field_appointments ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMP WITH TIME ZONE;").catch(() => {});
