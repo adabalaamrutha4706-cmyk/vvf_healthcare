@@ -39,6 +39,9 @@ export const seedDatabase = async () => {
           next_followup_date TIMESTAMP WITH TIME ZONE,
           telecaller_notes TEXT,
           lead_status VARCHAR(100) DEFAULT 'New Lead',
+          added_latitude DOUBLE PRECISION,
+          added_longitude DOUBLE PRECISION,
+          added_location_address TEXT,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
@@ -68,6 +71,10 @@ export const seedDatabase = async () => {
       await query("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;").catch(() => {});
       await query("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS created_by INTEGER;").catch(() => {});
       await query("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS updated_by INTEGER;").catch(() => {});
+      await query("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS gps_latitude DOUBLE PRECISION;").catch(() => {});
+      await query("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS gps_longitude DOUBLE PRECISION;").catch(() => {});
+      await query("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS geo_address TEXT;").catch(() => {});
+      await query("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS location_status VARCHAR(100) DEFAULT 'pending';").catch(() => {});
       await query("ALTER TABLE field_appointments ADD COLUMN IF NOT EXISTS assigned_telecaller_id INTEGER REFERENCES users(id) ON DELETE SET NULL;").catch(() => {});
       await query("ALTER TABLE field_appointments ADD COLUMN IF NOT EXISTS assigned_telecaller_name VARCHAR(255);").catch(() => {});
       await query("ALTER TABLE field_appointments ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMP WITH TIME ZONE;").catch(() => {});
@@ -75,6 +82,9 @@ export const seedDatabase = async () => {
       await query("ALTER TABLE field_appointments ADD COLUMN IF NOT EXISTS next_followup_date TIMESTAMP WITH TIME ZONE;").catch(() => {});
       await query("ALTER TABLE field_appointments ADD COLUMN IF NOT EXISTS telecaller_notes TEXT;").catch(() => {});
       await query("ALTER TABLE field_appointments ADD COLUMN IF NOT EXISTS lead_status VARCHAR(100) DEFAULT 'New Lead';").catch(() => {});
+      await query("ALTER TABLE field_appointments ADD COLUMN IF NOT EXISTS added_latitude DOUBLE PRECISION;").catch(() => {});
+      await query("ALTER TABLE field_appointments ADD COLUMN IF NOT EXISTS added_longitude DOUBLE PRECISION;").catch(() => {});
+      await query("ALTER TABLE field_appointments ADD COLUMN IF NOT EXISTS added_location_address TEXT;").catch(() => {});
 
     // Dynamic Alterations for Visit Verification Feature Columns
     await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION;").catch(() => {});
@@ -88,7 +98,9 @@ export const seedDatabase = async () => {
     await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS allowed_radius INTEGER DEFAULT 200;").catch(() => {});
 
     // Hospital Metadata
-    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS hospital_type VARCHAR(100) DEFAULT 'Clinic';").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS hospital_type VARCHAR(100) DEFAULT 'Hospital';").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS clinic_category VARCHAR(50) DEFAULT 'Hospital';").catch(() => {});
+    await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS parent_hospital_id INTEGER REFERENCES hospitals(id) ON DELETE SET NULL;").catch(() => {});
     await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS branch_code VARCHAR(50);").catch(() => {});
     await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS visiting_hours VARCHAR(255);").catch(() => {});
     await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS territory_zone VARCHAR(100);").catch(() => {});
@@ -119,6 +131,10 @@ export const seedDatabase = async () => {
     await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS geo_verification_status VARCHAR(100) DEFAULT 'MANUAL_REVIEW_REQUIRED';").catch(() => {});
     await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS updated_by INTEGER;").catch(() => {});
     await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS legacy_hospital_id VARCHAR(100);").catch(() => {});
+
+    // Migrate old Partner Clinic / In-House Clinic values to Hospitals
+    await query("UPDATE hospitals SET clinic_category = 'Hospital' WHERE clinic_category IN ('Partner Clinic', 'Partner Hospital');").catch(() => {});
+    await query("UPDATE hospitals SET clinic_category = 'In-House Hospital' WHERE clinic_category IN ('In-House Clinic', 'In-house Clinic');").catch(() => {});
 
     await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS checkin_latitude DOUBLE PRECISION;").catch(() => {});
     await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS checkin_longitude DOUBLE PRECISION;").catch(() => {});
@@ -162,6 +178,8 @@ export const seedDatabase = async () => {
     await query("ALTER TABLE visits ADD COLUMN IF NOT EXISTS checkin_hospital_lng DOUBLE PRECISION;").catch(() => {});
 
     // Users login tracking columns
+    await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_type VARCHAR(50) DEFAULT 'in-staff';").catch(() => {});
+    await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS assigned_hospital_id INTEGER;").catch(() => {});
     await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP WITH TIME ZONE;").catch(() => {});
     await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_url TEXT;").catch(() => {});
     await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_ip VARCHAR(100);").catch(() => {});
@@ -169,6 +187,10 @@ export const seedDatabase = async () => {
     await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS personal_email VARCHAR(255);").catch(() => {});
     await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS age INTEGER;").catch(() => {});
     await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS date_of_birth DATE;").catch(() => {});
+    await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS qualification TEXT;").catch(() => {});
+    await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS aadhar_number VARCHAR(100);").catch(() => {});
+    await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS date_of_joining DATE;").catch(() => {});
+    await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS assigned_therapy VARCHAR(100);").catch(() => {});
     await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(50);").catch(() => {});
     await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS about TEXT;").catch(() => {});
     await query("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_change_count INTEGER DEFAULT 0;").catch(() => {});
@@ -184,6 +206,18 @@ export const seedDatabase = async () => {
     await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS outbound_notes TEXT;").catch(() => {});
     await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS moved_to_telecalling BOOLEAN DEFAULT FALSE;").catch(() => {});
     await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS moved_to_telecalling_at TIMESTAMP WITH TIME ZONE;").catch(() => {});
+
+    // New appointment details columns
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS co_relation VARCHAR(255);").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS date_of_birth DATE;").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS blood_group VARCHAR(50);").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS city VARCHAR(255);").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS address TEXT;").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS diagnosis TEXT;").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS reference VARCHAR(255);").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS consultation_charges DECIMAL(12, 2) DEFAULT 0.00;").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS tests_charges DECIMAL(12, 2) DEFAULT 0.00;").catch(() => {});
+    await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS medicine_charges DECIMAL(12, 2) DEFAULT 0.00;").catch(() => {});
 
     // Restructured appointment portal columns
     await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS created_by_user_id INTEGER;").catch(() => {});
@@ -340,6 +374,8 @@ export const seedDatabase = async () => {
       about: 'Oversees platform governance, security policies, and organization-wide system configuration.',
       is_active: true,
       is_deleted: false,
+      staff_type: 'in-staff',
+      assigned_hospital_id: 801,
       password_change_count: 0,
       password_change_limit: 3,
       password_change_locked: false
@@ -358,433 +394,248 @@ export const seedDatabase = async () => {
       about: 'Manages hospital operations, staff coordination, and daily clinical workflow oversight.',
       is_active: true,
       is_deleted: false,
+      staff_type: 'in-staff',
+      assigned_hospital_id: 801,
       password_change_count: 0,
       password_change_limit: 3,
       password_change_locked: false
     },
     {
       id: 2,
-      name: 'Dr. Venkat S. (Dental)',
-      email: 'dental@vvf.org',
-      password_hash: hashPassword('dental123'),
-      role: 'Dental Doctor',
-      phone: '+91 9999999992',
-      personal_email: 'venkat.personal@vvf.org',
-      age: 52,
-      date_of_birth: '1973-01-15',
+      name: 'Dr. Ramesh Kumar',
+      email: 'doctor@vvf.org',
+      password_hash: hashPassword('doctor123'),
+      role: 'Doctor',
+      phone: '+91 9876543201',
+      personal_email: 'ramesh.doctor@vvf.org',
+      age: 44,
+      date_of_birth: '1981-03-15',
       gender: 'Male',
-      about: 'Lead dentist guiding clinical standards, dental teams, and treatment protocols.',
+      about: 'Senior Clinician.',
       is_active: true,
       is_deleted: false,
+      staff_type: 'in-staff',
+      assigned_hospital_id: 801,
       password_change_count: 0,
       password_change_limit: 3,
       password_change_locked: false
     },
     {
       id: 3,
-      name: 'Dr. Rajesh Kumar',
-      email: 'doctor@vvf.org',
-      password_hash: hashPassword('doctor123'),
-      role: 'Doctor',
-      phone: '+91 9999999993',
-      personal_email: 'rajesh.personal@vvf.org',
-      age: 41,
-      date_of_birth: '1984-11-03',
-      gender: 'Male',
-      about: 'Consultant physician handling patient appointments, diagnostics, and vascular care plans.',
+      name: 'Dr. Anita Dental',
+      email: 'dental@vvf.org',
+      password_hash: hashPassword('dental123'),
+      role: 'Dental Doctor',
+      phone: '+91 9876543202',
+      personal_email: 'anita.dental@vvf.org',
+      age: 36,
+      date_of_birth: '1989-06-25',
+      gender: 'Female',
+      about: 'Senior Dental Surgeon.',
       is_active: true,
       is_deleted: false,
+      staff_type: 'in-staff',
+      assigned_hospital_id: 801,
       password_change_count: 0,
       password_change_limit: 3,
       password_change_locked: false
     },
     {
       id: 4,
-      name: 'Priya Sharma',
-      email: 'reception@vvf.org',
-      password_hash: hashPassword('reception123'),
-      role: 'Reception',
-      phone: '+91 9999999994',
-      personal_email: 'priya.personal@vvf.org',
+      name: 'Dr. Vivek Dentist Jr',
+      email: 'dentistjr@vvf.org',
+      password_hash: hashPassword('dentistjr123'),
+      role: 'Dentist Junior',
+      phone: '+91 9876543203',
+      personal_email: 'vivek.dentistjr@vvf.org',
       age: 29,
-      date_of_birth: '1996-06-28',
-      gender: 'Female',
-      about: 'Front-desk receptionist managing patient check-ins, billing support, and appointment scheduling.',
+      date_of_birth: '1996-09-10',
+      gender: 'Male',
+      about: 'Junior Dentist.',
       is_active: true,
       is_deleted: false,
+      staff_type: 'in-staff',
+      assigned_hospital_id: 801,
       password_change_count: 0,
       password_change_limit: 3,
       password_change_locked: false
     },
     {
       id: 5,
-      name: 'Amit Patel',
-      email: 'telecaller@vvf.org',
-      password_hash: hashPassword('telecaller123'),
-      role: 'Telecaller',
-      phone: '+91 9999999995',
-      personal_email: 'amit.personal@vvf.org',
-      age: 27,
-      date_of_birth: '1998-09-10',
-      gender: 'Male',
-      about: 'Outbound telecaller coordinating patient follow-ups, lead nurturing, and callback scheduling.',
+      name: 'Pooja Dental Asst',
+      email: 'dentalasst@vvf.org',
+      password_hash: hashPassword('dentalasst123'),
+      role: 'Dental Assistant',
+      phone: '+91 9876543204',
+      personal_email: 'pooja.dentalasst@vvf.org',
+      age: 26,
+      date_of_birth: '1999-12-05',
+      gender: 'Female',
+      about: 'Dental Clinical Assistant.',
       is_active: true,
       is_deleted: false,
+      staff_type: 'in-staff',
+      assigned_hospital_id: 801,
       password_change_count: 0,
       password_change_limit: 3,
       password_change_locked: false
     },
     {
       id: 6,
-      name: 'Rohan Verma',
-      email: 'executive@vvf.org',
-      password_hash: hashPassword('executive123'),
-      role: 'Executive',
-      phone: '+91 9999999996',
-      personal_email: 'rohan.personal@vvf.org',
-      age: 31,
-      date_of_birth: '1994-12-05',
-      gender: 'Male',
-      about: 'Field executive conducting partner hospital visits, GPS check-ins, and on-site audits.',
+      name: 'Sravani Reception',
+      email: 'reception@vvf.org',
+      password_hash: hashPassword('reception123'),
+      role: 'Reception',
+      phone: '+91 9876543205',
+      personal_email: 'sravani.reception@vvf.org',
+      age: 27,
+      date_of_birth: '1998-02-14',
+      gender: 'Female',
+      about: 'Front Desk & Patient Registrar.',
       is_active: true,
       is_deleted: false,
+      staff_type: 'in-staff',
+      assigned_hospital_id: 801,
       password_change_count: 0,
       password_change_limit: 3,
       password_change_locked: false
     },
     {
       id: 7,
-      name: 'Ramesh OP Tech',
-      email: 'optech@vvf.org',
-      password_hash: hashPassword('optech123'),
-      role: 'OP Technician',
-      phone: '+91 9999999997',
-      personal_email: 'ramesh.personal@vvf.org',
-      age: 28,
-      date_of_birth: '1998-05-14',
-      gender: 'Male',
-      about: 'Operative technician managing clinical therapy machinery and patient dive sessions.',
+      name: 'Sarah Telecaller',
+      email: 'tc@vvf.org',
+      password_hash: hashPassword('tc123'),
+      role: 'Telecaller',
+      phone: '+91 9876543206',
+      personal_email: 'sarah.tc@vvf.org',
+      age: 25,
+      date_of_birth: '2000-05-20',
+      gender: 'Female',
+      about: 'Telecaller Outreach Specialist.',
       is_active: true,
       is_deleted: false,
+      staff_type: 'in-staff',
+      assigned_hospital_id: 801,
       password_change_count: 0,
       password_change_limit: 3,
       password_change_locked: false
     },
     {
       id: 8,
-      name: 'Suresh SOP Tech',
+      name: 'John Executive',
+      email: 'exec@vvf.org',
+      password_hash: hashPassword('exec123'),
+      role: 'Executive',
+      phone: '+91 9876543207',
+      personal_email: 'john.exec@vvf.org',
+      age: 28,
+      date_of_birth: '1997-10-18',
+      gender: 'Male',
+      about: 'Field Executive.',
+      is_active: true,
+      is_deleted: false,
+      staff_type: 'field-staff',
+      assigned_hospital_id: null,
+      password_change_count: 0,
+      password_change_limit: 3,
+      password_change_locked: false
+    },
+    {
+      id: 9,
+      name: 'Karthik OP Tech',
+      email: 'optech@vvf.org',
+      password_hash: hashPassword('optech123'),
+      role: 'OP Technician',
+      phone: '+91 9876543208',
+      personal_email: 'karthik.optech@vvf.org',
+      age: 31,
+      date_of_birth: '1994-07-22',
+      gender: 'Male',
+      about: 'OP Therapy Technician.',
+      is_active: true,
+      is_deleted: false,
+      staff_type: 'in-staff',
+      assigned_hospital_id: 801,
+      password_change_count: 0,
+      password_change_limit: 3,
+      password_change_locked: false
+    },
+    {
+      id: 10,
+      name: 'Meena SOP Tech',
       email: 'soptech@vvf.org',
       password_hash: hashPassword('soptech123'),
       role: 'SOP Technician',
-      phone: '+91 9999999998',
-      personal_email: 'suresh.personal@vvf.org',
-      age: 34,
-      date_of_birth: '1992-10-19',
-      gender: 'Male',
-      about: 'Senior operative technician reviewing technician logs and verifying sessions safety compliance.',
+      phone: '+91 9876543209',
+      personal_email: 'meena.soptech@vvf.org',
+      age: 33,
+      date_of_birth: '1992-11-30',
+      gender: 'Female',
+      about: 'SOP Therapy Technician.',
       is_active: true,
       is_deleted: false,
+      staff_type: 'in-staff',
+      assigned_hospital_id: 801,
       password_change_count: 0,
       password_change_limit: 3,
       password_change_locked: false
     }
   ];
 
-  const hospitals = [
+  const hospitals: any[] = [
     {
-      id: 1,
-      name: 'City Heart & Vascular Center',
-      city: 'Hyderabad',
-      state: 'Telangana',
-      contact_person: 'Mr. K. Rao',
-      phone: '+91 9876543210',
-      status: 'Active',
-      latitude: 17.385044,
-      longitude: 78.486671,
-      is_deleted: false,
-      hospital_uid: 'VVF-001'
-    },
-    {
-      id: 2,
-      name: 'Metro General Hospital',
-      city: 'Secunderabad',
-      state: 'Telangana',
-      contact_person: 'Dr. Srinivas',
-      phone: '+91 9876543211',
-      status: 'Active',
-      latitude: 17.448293,
-      longitude: 78.508544,
-      is_deleted: false,
-      hospital_uid: 'VVF-002'
-    },
-    {
-      id: 3,
-      name: 'Vascular Care Clinic',
-      city: 'Vijayawada',
-      state: 'Andhra Pradesh',
-      contact_person: 'Mrs. Lakshmi',
-      phone: '+91 9876543212',
-      status: 'Active',
-      latitude: 16.506174,
-      longitude: 80.648015,
-      is_deleted: false,
-      hospital_uid: 'VVF-003'
-    },
-    {
-      id: 4,
-      name: 'Apollo Vascular Wing',
+      id: 801,
+      name: 'Venkateswara Vascular Foundation',
       city: 'Visakhapatnam',
       state: 'Andhra Pradesh',
-      contact_person: 'Mr. Ramesh',
-      phone: '+91 9876543213',
-      status: 'Pending',
-      latitude: 17.686816,
-      longitude: 83.218482,
+      contact_person: 'Dr. Harivadan Lukka',
+      phone: '+91 79975 92222',
+      status: 'ACTIVE',
+      latitude: 17.714300198610253,
+      longitude: 83.3124937377078,
+      address: 'Door No: 14-1-128, First Floor, Nowroji Road, Maharanipeta, Visakhapatnam, Andhra Pradesh',
+      landmark: 'Near PJ Scan Centre, Pandimetta Junction',
+      pincode: '530002',
+      google_maps_link: 'https://maps.app.goo.gl/SLdF9c2U2Rm2X7jA6',
+      allowed_radius: 250,
+      clinic_category: 'Hospital',
+      hospital_uid: 'VVF-001',
       is_deleted: false,
-      geofencing_enabled: false,
-      hospital_uid: 'VVF-004'
-    }
-  ];
-
-  const appointments = [
-    {
-      id: 1,
-      patient_name: 'Satish Goud',
-      age: 58,
-      gender: 'Male',
-      contact_number: '+91 9123456780',
-      hospital_id: 1,
-      doctor_id: 3,
-      appointment_date: new Date(Date.now() + 1000 * 60 * 60 * 2).toISOString(), // in 2 hours
-      notes: 'Varicose veins initial evaluation.',
-      total_amount: 1500.00,
-      paid_amount: 1500.00,
-      payment_status: 'Completed',
-      created_by: 4,
-      is_deleted: false
+      geofencing_enabled: true
     },
     {
-      id: 2,
-      patient_name: 'Anjali Devi',
-      age: 47,
-      gender: 'Female',
-      contact_number: '+91 9123456781',
-      hospital_id: 1,
-      doctor_id: 2,
-      appointment_date: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(), // tomorrow
-      notes: 'Deep Vein Thrombosis follow-up check.',
-      total_amount: 2000.00,
-      paid_amount: 500.00,
-      payment_status: 'Partially Paid',
-      created_by: 4,
-      is_deleted: false
-    },
-    {
-      id: 3,
-      patient_name: 'K. Jagannadhan',
-      age: 65,
-      gender: 'Male',
-      contact_number: '+91 9123456782',
-      hospital_id: 2,
-      doctor_id: 3,
-      appointment_date: new Date(Date.now() - 1000 * 60 * 60 * 48).toISOString(), // 2 days ago
-      notes: 'Diabetic foot ulcer consultation.',
-      total_amount: 1200.00,
-      paid_amount: 0.00,
-      payment_status: 'Unpaid',
-      created_by: 4,
-      is_deleted: false
+      id: 802,
+      name: 'VVF Inhouse Clinic - Venkateswara Vascular Foundation',
+      city: 'Visakhapatnam',
+      state: 'Andhra Pradesh',
+      contact_person: 'Dr. Harivadan Lukka',
+      phone: '+91 79975 92222',
+      status: 'ACTIVE',
+      latitude: 17.714300198610253,
+      longitude: 83.3124937377078,
+      address: 'First Floor, Nowroji Road, Maharanipeta, Visakhapatnam, Andhra Pradesh',
+      landmark: 'Inside Venkateswara Vascular Foundation Complex',
+      pincode: '530002',
+      google_maps_link: 'https://maps.app.goo.gl/SLdF9c2U2Rm2X7jA6',
+      allowed_radius: 250,
+      clinic_category: 'In-House Hospital',
+      parent_hospital_id: 801,
+      hospital_uid: 'VVF-002',
+      is_deleted: false,
+      geofencing_enabled: true
     }
   ];
 
-  const payments = [
-    {
-      id: 1,
-      appointment_id: 1,
-      amount: 1500.00,
-      payment_method: 'UPI/GPay',
-      transaction_ref: 'TXN9090123',
-      notes: 'Full payment received at desk',
-      created_by: 4,
-      created_at: new Date(Date.now() - 1000 * 60 * 60 * 1).toISOString(),
-      payment_splits: null
-    },
-    {
-      id: 2,
-      appointment_id: 2,
-      amount: 500.00,
-      payment_method: 'Cash',
-      transaction_ref: 'CASH-REC-102',
-      notes: 'Registration fee paid',
-      created_by: 4,
-      created_at: new Date().toISOString(),
-      payment_splits: null
-    }
-  ];
-
-  const leads = [
-    {
-      id: 1,
-      patient_name: 'Suresh Kumar',
-      contact_number: '+91 9345678901',
-      status: 'Interested',
-      notes: 'Enquired about vascular screening package.',
-      callback_time: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
-      assigned_to: 5,
-      is_deleted: false
-    },
-    {
-      id: 2,
-      patient_name: 'Mary Kom',
-      contact_number: '+91 9345678902',
-      status: 'Follow-up',
-      notes: 'Requested callback after consulting family.',
-      callback_time: new Date(Date.now() + 1000 * 60 * 60 * 48).toISOString(),
-      assigned_to: 5,
-      is_deleted: false
-    }
-  ];
-
-  const visits = [
-    {
-      id: 1,
-      executive_id: 6,
-      hospital_id: 1,
-      start_time: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
-      end_time: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(),
-      summary: 'Delivered vein laser machinery parts.',
-      notes: 'Maintenance checklist completed. Manager signature taken.',
-      status: 'Completed',
-      gps_lat: 17.385044,
-      gps_lng: 78.486671,
-      city: 'Hyderabad',
-      state: 'Telangana',
-      is_deleted: false
-    },
-    {
-      id: 2,
-      executive_id: 6,
-      hospital_id: 2,
-      start_time: new Date(Date.now() - 1000 * 60 * 60 * 1).toISOString(),
-      end_time: null,
-      summary: 'Routine doctor meeting',
-      notes: 'Discussing medicine order collection.',
-      status: 'In Progress',
-      gps_lat: 17.448293,
-      gps_lng: 78.508544,
-      city: 'Secunderabad',
-      state: 'Telangana',
-      is_deleted: false
-    }
-  ];
-
-  const visit_photos = [
-    {
-      id: 1,
-      visit_id: 1,
-      photo_url: '/uploads/visits/sample-equipment.jpg',
-      gps_lat: 17.385044,
-      gps_lng: 78.486671,
-      city: 'Hyderabad',
-      state: 'Telangana',
-      captured_at: new Date(Date.now() - 1000 * 60 * 60 * 4.5).toISOString()
-    }
-  ];
-
-  const notifications = [
-    {
-      id: 1,
-      user_id: 1,
-      title: 'New Visit Registered',
-      message: 'Rohan Verma started a visit at Metro General Hospital.',
-      is_read: false,
-      created_at: new Date().toISOString()
-    }
-  ];
-
-  const therapy_sessions = [
-    {
-      id: 1,
-      patient_name: 'Harish Rao',
-      mobile_number: '9848022338',
-      therapy_type: 'HBOT',
-      timings: '09:00 AM - 10:00 AM',
-      rescheduled: 'No',
-      actual_start: '09:05 AM',
-      session_date: '2026-06-15',
-      end_time: '10:05 AM',
-      op_technician_id: 7,
-      sop_technician_id: 8,
-      op_verified: true,
-      sop_verified: false,
-      status: 'Pending Verification',
-      hospital_id: 1
-    },
-    {
-      id: 2,
-      patient_name: 'Lakshmi K.',
-      mobile_number: '9123456789',
-      therapy_type: 'Lab',
-      timings: '10:00 AM - 11:00 AM',
-      rescheduled: 'No',
-      actual_start: '10:00 AM',
-      session_date: '2026-06-15',
-      end_time: '10:30 AM',
-      op_technician_id: 7,
-      sop_technician_id: 8,
-      op_verified: false,
-      sop_verified: false,
-      status: 'Pending Verification',
-      hospital_id: 1
-    },
-    {
-      id: 3,
-      patient_name: 'Anand Kumar',
-      mobile_number: '9440123456',
-      therapy_type: 'Hydrogen Inhalation',
-      timings: '11:00 AM - 11:30 AM',
-      rescheduled: 'No',
-      actual_start: '',
-      session_date: '2026-06-15',
-      end_time: '',
-      op_technician_id: 7,
-      sop_technician_id: 8,
-      op_verified: false,
-      sop_verified: false,
-      status: 'Pending Verification',
-      hospital_id: 2
-    }
-  ];
-
-  const therapy_hbot = [
-    {
-      id: 1,
-      session_id: 1,
-      dive_surface_timings: 'Dive: 09:00 AM\nSurface: 10:15 AM',
-      pressure_type: 'Cylinder Pressure',
-      pressure_value: 120,
-      next_session_date: '2026-06-20',
-      next_session_time: '09:00 AM'
-    }
-  ];
-
-  const therapy_lab = [
-    {
-      id: 1,
-      session_id: 2,
-      tests: 'CBC, LFT, Blood Sugar',
-      reported: 'Yes',
-      report_printed: 'No',
-      whatsapp_report: 'Not Sent'
-    }
-  ];
-
-  const therapy_hydrogen_inhalation = [
-    {
-      id: 1,
-      session_id: 3
-    }
-  ];
+  const appointments: any[] = [];
+  const payments: any[] = [];
+  const leads: any[] = [];
+  const visits: any[] = [];
+  const visit_photos: any[] = [];
+  const notifications: any[] = [];
+  const therapy_sessions: any[] = [];
+  const therapy_hbot: any[] = [];
+  const therapy_lab: any[] = [];
+  const therapy_hydrogen_inhalation: any[] = [];
 
   const therapy_ozone: any[] = [];
   const therapy_physiotherapy: any[] = [];
@@ -818,28 +669,46 @@ export const seedDatabase = async () => {
   // Try seed PostgreSQL database
   if (isPostgresConnected) {
     try {
+      for (const h of hospitals) {
+        await query(`
+          INSERT INTO hospitals (id, name, city, state, contact_person, phone, status, latitude, longitude, address, landmark, pincode, allowed_radius, clinic_category, parent_hospital_id, is_deleted, geofencing_enabled, hospital_uid)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+          ON CONFLICT (id) DO UPDATE SET 
+            name = EXCLUDED.name,
+            city = EXCLUDED.city,
+            state = EXCLUDED.state,
+            contact_person = EXCLUDED.contact_person,
+            phone = EXCLUDED.phone,
+            latitude = EXCLUDED.latitude, 
+            longitude = EXCLUDED.longitude, 
+            address = EXCLUDED.address,
+            landmark = EXCLUDED.landmark,
+            pincode = EXCLUDED.pincode,
+            allowed_radius = EXCLUDED.allowed_radius,
+            clinic_category = EXCLUDED.clinic_category,
+            parent_hospital_id = EXCLUDED.parent_hospital_id,
+            geofencing_enabled = EXCLUDED.geofencing_enabled,
+            hospital_uid = COALESCE(hospitals.hospital_uid, EXCLUDED.hospital_uid)
+        `, [h.id, h.name, h.city, h.state, h.contact_person, h.phone, h.status, h.latitude, h.longitude, h.address || '', h.landmark || '', h.pincode || '', h.allowed_radius || 200, h.clinic_category || 'Hospital', h.parent_hospital_id || null, h.is_deleted || false, h.geofencing_enabled !== undefined ? h.geofencing_enabled : true, h.hospital_uid]);
+      }
       for (const u of users) {
         await query(`
-          INSERT INTO users (id, name, email, password_hash, role, phone, personal_email, age, date_of_birth, gender, about, is_active, is_deleted, password_change_count, password_change_limit, password_change_locked)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+          INSERT INTO users (id, name, email, password_hash, role, phone, personal_email, age, date_of_birth, gender, about, is_active, is_deleted, staff_type, assigned_hospital_id, password_change_count, password_change_limit, password_change_locked)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
           ON CONFLICT (id) DO UPDATE SET
+            name = EXCLUDED.name,
+            email = EXCLUDED.email,
+            password_hash = EXCLUDED.password_hash,
+            role = EXCLUDED.role,
+            phone = EXCLUDED.phone,
+            staff_type = EXCLUDED.staff_type,
+            assigned_hospital_id = EXCLUDED.assigned_hospital_id,
             personal_email = COALESCE(users.personal_email, EXCLUDED.personal_email),
             age = COALESCE(users.age, EXCLUDED.age),
             date_of_birth = COALESCE(users.date_of_birth, EXCLUDED.date_of_birth),
             gender = COALESCE(users.gender, EXCLUDED.gender),
             about = COALESCE(users.about, EXCLUDED.about)
-        `, [u.id, u.name, u.email, u.password_hash, u.role, u.phone, u.personal_email, u.age, u.date_of_birth, u.gender, u.about, u.is_active, u.is_deleted, u.password_change_count, u.password_change_limit, u.password_change_locked]);
-      }
-      for (const h of hospitals) {
-        await query(`
-          INSERT INTO hospitals (id, name, city, state, contact_person, phone, status, latitude, longitude, is_deleted, geofencing_enabled, hospital_uid)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-          ON CONFLICT (id) DO UPDATE SET 
-            latitude = EXCLUDED.latitude, 
-            longitude = EXCLUDED.longitude, 
-            geofencing_enabled = EXCLUDED.geofencing_enabled,
-            hospital_uid = COALESCE(hospitals.hospital_uid, EXCLUDED.hospital_uid)
-        `, [h.id, h.name, h.city, h.state, h.contact_person, h.phone, h.status, h.latitude, h.longitude, h.is_deleted, h.geofencing_enabled !== undefined ? h.geofencing_enabled : true, h.hospital_uid]);
+        `, [u.id, u.name, u.email, u.password_hash, u.role, u.phone, u.personal_email, u.age, u.date_of_birth, u.gender, u.about, u.is_active, u.is_deleted, u.staff_type || 'in-staff', u.assigned_hospital_id || null, u.password_change_count || 0, u.password_change_limit || 3, u.password_change_locked || false]);
       }
       for (const s of therapy_sessions) {
         await query(`

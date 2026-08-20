@@ -8,6 +8,23 @@ import { rebalanceLeadsAcrossTelecallers } from '../utils/leadAssignmentHelper';
 
 const hashPassword = (pwd: string) => bcrypt.hashSync(pwd, 10);
 
+const calculateAge = (dobString: string | null | undefined): number | null => {
+  if (!dobString) return null;
+  try {
+    const birthDate = new Date(dobString);
+    if (isNaN(birthDate.getTime())) return null;
+    const today = new Date();
+    let calculatedAge = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      calculatedAge--;
+    }
+    return calculatedAge >= 0 ? calculatedAge : null;
+  } catch (_) {
+    return null;
+  }
+};
+
 export const getUsers = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const requesterRole = req.user?.role;
@@ -19,15 +36,18 @@ export const getUsers = async (req: AuthenticatedRequest, res: Response) => {
       });
     }
 
-    // 1. Fetch users (filter out Superadmin role for standard Admins to maintain concealment)
-    let usersQuery = 'SELECT id, name, email, role, phone, is_active, password_change_count, password_change_limit, password_change_locked, monthly_target, created_at FROM users WHERE is_deleted = false';
+    // 1. Fetch users with staff_type and assigned hospital info
+    let usersQuery = `SELECT u.id, u.name, u.email, u.role, u.phone, u.is_active, u.password_change_count, u.password_change_limit, u.password_change_locked, u.monthly_target, u.staff_type, u.assigned_hospital_id, h.name AS assigned_hospital_name, u.qualification, u.aadhar_number, u.date_of_birth, u.age, u.date_of_joining, u.assigned_therapy, u.created_at
+      FROM users u
+      LEFT JOIN hospitals h ON u.assigned_hospital_id = h.id
+      WHERE u.is_deleted = false`;
     const queryParams: any[] = [];
 
     if (requesterRole === 'Admin') {
-      usersQuery += " AND role != 'Superadmin'";
+      usersQuery += " AND u.role != 'Superadmin'";
     }
 
-    usersQuery += ' ORDER BY id ASC';
+    usersQuery += ' ORDER BY u.id ASC';
     const usersResult = await query(usersQuery, queryParams);
 
     // 2. Fetch all attendance records ordered by punch_in DESC
@@ -110,7 +130,7 @@ export const getDentists = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const result = await query(
       `SELECT id, name, email, phone, role FROM users 
-       WHERE role = 'Dental Doctor' AND is_active = true AND is_deleted = false 
+       WHERE role IN ('Dental Doctor', 'Dentist Junior', 'Dental Assistant') AND is_active = true AND is_deleted = false 
        ORDER BY name ASC`
     );
     return res.status(200).json({
@@ -183,7 +203,7 @@ export const createUser = async (req: AuthenticatedRequest, res: Response) => {
       });
     }
 
-    const { name, email, password, role, phone } = req.body;
+    const { name, email, password, role, phone, staff_type, assigned_hospital_id, qualification, aadhar_number, date_of_birth, age, date_of_joining, assigned_therapy } = req.body;
 
     if (!name || !email || !password || !role) {
       return res.status(400).json({
@@ -193,7 +213,7 @@ export const createUser = async (req: AuthenticatedRequest, res: Response) => {
       });
     }
 
-    const validation = validateEmployee({ name, phone });
+    const validation = validateEmployee({ name, phone, date_of_birth });
     if (!validation.isValid) {
       return res.status(400).json({
         success: false,
@@ -203,8 +223,38 @@ export const createUser = async (req: AuthenticatedRequest, res: Response) => {
       });
     }
 
+    // Staff type validation
+    const resolvedStaffType = staff_type || 'in-staff';
+    if (!['in-staff', 'field-staff'].includes(resolvedStaffType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid staff_type. Must be "in-staff" or "field-staff".',
+        errorCode: 'VALIDATION_ERROR'
+      });
+    }
+
+    // In-staff must have an assigned hospital
+    if (resolvedStaffType === 'in-staff') {
+      if (!assigned_hospital_id) {
+        return res.status(400).json({
+          success: false,
+          message: 'Assigned Hospital is required for In-Staff employees.',
+          errorCode: 'VALIDATION_ERROR'
+        });
+      }
+      const hospitalCheck = await query('SELECT id FROM hospitals WHERE id = $1 AND is_deleted = false', [assigned_hospital_id]);
+      if (hospitalCheck.rows.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Assigned hospital not found.',
+          errorCode: 'VALIDATION_ERROR'
+        });
+      }
+    }
+
     // Role Escalation Prevention: standard Admins cannot assign the Superadmin role
-    if (role === 'Superadmin' && requesterRole !== 'Superadmin') {
+    const assignedRoles = (role || '').split(',').map((r: string) => r.trim());
+    if (assignedRoles.includes('Superadmin') && requesterRole !== 'Superadmin') {
       return res.status(403).json({
         success: false,
         message: 'Unauthorized. Only Superadmins can assign the Superadmin role.',
@@ -227,11 +277,12 @@ export const createUser = async (req: AuthenticatedRequest, res: Response) => {
     }
 
     const pwdHash = hashPassword(password);
+    const hospitalId = resolvedStaffType === 'field-staff' ? null : (assigned_hospital_id || null);
 
     const result = await query(
-      `INSERT INTO users (name, email, password_hash, role, phone, is_active, password_change_count, password_change_limit, password_change_locked)
-       VALUES ($1, $2, $3, $4, $5, true, 0, 3, false) RETURNING id, name, email, role, phone, is_active, password_change_count, password_change_limit, password_change_locked, created_at`,
-      [name, email, pwdHash, role, phone || '']
+      `INSERT INTO users (name, email, password_hash, role, phone, is_active, password_change_count, password_change_limit, password_change_locked, staff_type, assigned_hospital_id, qualification, aadhar_number, date_of_birth, age, date_of_joining, assigned_therapy)
+       VALUES ($1, $2, $3, $4, $5, true, 0, 3, false, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id, name, email, role, phone, is_active, password_change_count, password_change_limit, password_change_locked, staff_type, assigned_hospital_id, qualification, aadhar_number, date_of_birth, age, date_of_joining, assigned_therapy, created_at`,
+      [name, email, pwdHash, role, phone || '', resolvedStaffType, hospitalId, qualification || null, aadhar_number || null, date_of_birth || null, calculateAge(date_of_birth), date_of_joining || null, assigned_therapy || null]
     );
 
     const newUser = result.rows[0];
@@ -276,7 +327,7 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response) => {
     }
 
     const { id } = req.params;
-    const { name, email, password, role, phone, is_active, password_change_count, password_change_limit, password_change_locked, monthly_target } = req.body;
+    const { name, email, password, role, phone, is_active, password_change_count, password_change_limit, password_change_locked, monthly_target, staff_type, assigned_hospital_id, qualification, aadhar_number, date_of_birth, age, date_of_joining, assigned_therapy } = req.body;
 
     const existingResult = await query(
       'SELECT * FROM users WHERE id = $1 AND is_deleted = false',
@@ -294,7 +345,8 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response) => {
     const user = existingResult.rows[0];
 
     // Superadmin Concealment: Admins cannot access or update Superadmins (throw 404)
-    if (user.role === 'Superadmin' && requesterRole !== 'Superadmin') {
+    const existingRoles = (user.role || '').split(',').map((r: string) => r.trim());
+    if (existingRoles.includes('Superadmin') && requesterRole !== 'Superadmin') {
       return res.status(404).json({
         success: false,
         message: 'User not found.',
@@ -303,7 +355,8 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response) => {
     }
 
     // Role Escalation Prevention: standard Admins cannot elevate a user to Superadmin
-    if (role === 'Superadmin' && user.role !== 'Superadmin' && requesterRole !== 'Superadmin') {
+    const assignedRoles = (role || '').split(',').map((r: string) => r.trim());
+    if (assignedRoles.includes('Superadmin') && !existingRoles.includes('Superadmin') && requesterRole !== 'Superadmin') {
       return res.status(403).json({
         success: false,
         message: 'Unauthorized. Only Superadmins can assign the Superadmin role.',
@@ -354,10 +407,11 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response) => {
     const newRole = role !== undefined ? role : user.role;
     const newPhone = phone !== undefined ? phone : user.phone;
     const newActive = is_active !== undefined ? is_active : user.is_active;
+    const newDob = date_of_birth !== undefined ? date_of_birth : user.date_of_birth;
 
-    // Only validate name and phone if they are being modified in the request
-    if (name !== undefined || phone !== undefined) {
-      const validation = validateEmployee({ name: newName, phone: newPhone });
+    // Only validate name, phone, and dob if they are being modified in the request
+    if (name !== undefined || phone !== undefined || date_of_birth !== undefined) {
+      const validation = validateEmployee({ name: newName, phone: newPhone, date_of_birth: newDob });
       if (!validation.isValid) {
         return res.status(400).json({
           success: false,
@@ -370,6 +424,43 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response) => {
 
     const newTarget = monthly_target !== undefined ? parseInt(String(monthly_target), 10) : user.monthly_target;
 
+    // Staff type handling
+    const newStaffType = staff_type !== undefined ? staff_type : (user.staff_type || 'in-staff');
+    if (!['in-staff', 'field-staff'].includes(newStaffType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid staff_type. Must be "in-staff" or "field-staff".',
+        errorCode: 'VALIDATION_ERROR'
+      });
+    }
+
+    let newHospitalId = assigned_hospital_id !== undefined ? assigned_hospital_id : user.assigned_hospital_id;
+    if (newStaffType === 'field-staff') {
+      newHospitalId = null; // Field staff don't have assigned hospitals
+    } else {
+      if (!newHospitalId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Assigned Hospital is required for In-Staff employees.',
+          errorCode: 'VALIDATION_ERROR'
+        });
+      }
+      const hospitalCheck = await query('SELECT id FROM hospitals WHERE id = $1 AND is_deleted = false', [newHospitalId]);
+      if (hospitalCheck.rows.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Assigned hospital not found.',
+          errorCode: 'VALIDATION_ERROR'
+        });
+      }
+    }
+
+    const newQualification = qualification !== undefined ? qualification : user.qualification;
+    const newAadharNumber = aadhar_number !== undefined ? aadhar_number : user.aadhar_number;
+    const newAge = newDob ? calculateAge(newDob) : (age !== undefined ? (age ? parseInt(String(age), 10) : null) : user.age);
+    const newDoj = date_of_joining !== undefined ? date_of_joining : user.date_of_joining;
+    const newAssignedTherapy = assigned_therapy !== undefined ? assigned_therapy : user.assigned_therapy;
+
     let updateQuery = '';
     let params: any[] = [];
 
@@ -379,19 +470,21 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response) => {
         UPDATE users SET
           name = $1, email = $2, password_hash = $3, role = $4, phone = $5, is_active = $6,
           password_change_count = $7, password_change_limit = $8, password_change_locked = $9,
-          monthly_target = $10
-        WHERE id = $11 RETURNING id, name, email, role, phone, is_active, password_change_count, password_change_limit, password_change_locked, monthly_target, created_at
+          monthly_target = $10, staff_type = $11, assigned_hospital_id = $12,
+          qualification = $13, aadhar_number = $14, date_of_birth = $15, age = $16, date_of_joining = $17, assigned_therapy = $18
+        WHERE id = $19 RETURNING id, name, email, role, phone, is_active, password_change_count, password_change_limit, password_change_locked, monthly_target, staff_type, assigned_hospital_id, qualification, aadhar_number, date_of_birth, age, date_of_joining, assigned_therapy, created_at
       `;
-      params = [newName, newEmail, pwdHash, newRole, newPhone, newActive, reqCount, reqLimit, reqLocked, newTarget, id];
+      params = [newName, newEmail, pwdHash, newRole, newPhone, newActive, reqCount, reqLimit, reqLocked, newTarget, newStaffType, newHospitalId, newQualification, newAadharNumber, newDob, newAge, newDoj, newAssignedTherapy || null, id];
     } else {
       updateQuery = `
         UPDATE users SET
           name = $1, email = $2, role = $3, phone = $4, is_active = $5,
           password_change_count = $6, password_change_limit = $7, password_change_locked = $8,
-          monthly_target = $9
-        WHERE id = $10 RETURNING id, name, email, role, phone, is_active, password_change_count, password_change_limit, password_change_locked, monthly_target, created_at
+          monthly_target = $9, staff_type = $10, assigned_hospital_id = $11,
+          qualification = $12, aadhar_number = $13, date_of_birth = $14, age = $15, date_of_joining = $16, assigned_therapy = $17
+        WHERE id = $18 RETURNING id, name, email, role, phone, is_active, password_change_count, password_change_limit, password_change_locked, monthly_target, staff_type, assigned_hospital_id, qualification, aadhar_number, date_of_birth, age, date_of_joining, assigned_therapy, created_at
       `;
-      params = [newName, newEmail, newRole, newPhone, newActive, reqCount, reqLimit, reqLocked, newTarget, id];
+      params = [newName, newEmail, newRole, newPhone, newActive, reqCount, reqLimit, reqLocked, newTarget, newStaffType, newHospitalId, newQualification, newAadharNumber, newDob, newAge, newDoj, newAssignedTherapy || null, id];
     }
 
     const result = await query(updateQuery, params);

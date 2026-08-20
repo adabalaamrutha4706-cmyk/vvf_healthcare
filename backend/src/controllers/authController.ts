@@ -22,7 +22,7 @@ export const login = async (req: AuthenticatedRequest, res: Response) => {
     }
 
     const result = await query(
-      `SELECT id, name, email, password_hash, role, phone, personal_email, age, date_of_birth, gender, about, is_active, is_deleted FROM users WHERE email = $1`,
+      `SELECT id, name, email, password_hash, role, phone, personal_email, age, date_of_birth, gender, about, is_active, is_deleted, staff_type, assigned_hospital_id FROM users WHERE email = $1`,
       [email]
     );
 
@@ -51,6 +51,45 @@ export const login = async (req: AuthenticatedRequest, res: Response) => {
         message: 'Invalid email or password.',
         errorCode: 'INVALID_CREDENTIALS'
       });
+    }
+
+    // Capture location coords from request body
+    const { latitude, longitude } = req.body;
+
+    // Strict check: if user is in-staff and assigned a hospital, block login if out of range
+    if (user.role !== 'Superadmin' && user.role !== 'Admin' && user.role !== 'Co-admin' && user.staff_type === 'in-staff' && user.assigned_hospital_id) {
+      if (latitude == null || longitude == null) {
+        return res.status(400).json({
+          success: false,
+          message: 'Location access is required to log in. Please enable GPS location permissions in your browser.',
+          errorCode: 'LOCATION_REQUIRED'
+        });
+      }
+
+      const hospitalResult = await query(
+        'SELECT latitude, longitude, allowed_radius, name FROM hospitals WHERE id = $1 AND is_deleted = false',
+        [user.assigned_hospital_id]
+      );
+
+      if (hospitalResult.rows.length > 0) {
+        const hospital = hospitalResult.rows[0];
+        if (hospital.latitude != null && hospital.longitude != null) {
+          const distance = haversineDistance(
+            Number(latitude), Number(longitude),
+            Number(hospital.latitude), Number(hospital.longitude)
+          );
+          const allowedRadius = hospital.allowed_radius || 200; // default 200m
+          
+          if (distance > allowedRadius) {
+            console.log(`[AUTH GEOFENCE] Login blocked for ${user.email}. User coords: (${latitude}, ${longitude}). Hospital: ${hospital.name} (${hospital.latitude}, ${hospital.longitude}). Distance: ${Math.round(distance)}m. Allowed: ${allowedRadius}m.`);
+            return res.status(403).json({
+              success: false,
+              message: `Access Denied: You are not located at your assigned hospital (${hospital.name}). Your location must match the hospital to log in. (Your location: ${latitude}, ${longitude}. Distance: ${Math.round(distance)}m, allowed: ${allowedRadius}m)`,
+              errorCode: 'LOCATION_MISMATCH'
+            });
+          }
+        }
+      }
     }
 
     const token = jwt.sign(
@@ -116,21 +155,41 @@ export const login = async (req: AuthenticatedRequest, res: Response) => {
 
       // Create new attendance session
       const dateStr = nowStr.split('T')[0];
+      let initialLocationStatus = 'pending';
+      if (user.staff_type === 'field-staff') {
+        initialLocationStatus = 'field_location';
+      } else if (user.staff_type === 'in-staff' && user.assigned_hospital_id) {
+        initialLocationStatus = 'within_range';
+      }
 
       const insertResult = await query(
-        `INSERT INTO attendance (user_id, punch_in, status, date, device_info)
-         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-        [user.id, nowStr, 'active', dateStr, clientDevice]
+        `INSERT INTO attendance (user_id, punch_in, status, date, device_info, gps_latitude, gps_longitude, location_status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+        [user.id, nowStr, 'active', dateStr, clientDevice, latitude ? Number(latitude) : null, longitude ? Number(longitude) : null, initialLocationStatus]
       );
 
       if (insertResult.rows && insertResult.rows.length > 0) {
+        const attendanceId = insertResult.rows[0].id;
         await logAudit(
           user.id,
           'ATTENDANCE_SESSION_START',
           'attendance',
-          insertResult.rows[0].id,
+          attendanceId,
           'User attendance session started automatically on login'
         );
+
+        if (latitude != null && longitude != null) {
+          reverseGeocode(Number(latitude), Number(longitude))
+            .then((address) => {
+              if (address) {
+                query(
+                  `UPDATE attendance SET geo_address = $1 WHERE id = $2`,
+                  [address, attendanceId]
+                ).catch((err) => console.error('Failed to save geo_address on login:', err));
+              }
+            })
+            .catch((err) => console.error('Failed to reverse geocode login coordinates:', err));
+        }
       }
     } catch (dbErr) {
       console.error('Failed to log attendance session on login:', dbErr);
@@ -139,7 +198,8 @@ export const login = async (req: AuthenticatedRequest, res: Response) => {
     // Set cookie
     res.cookie('token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: process.env.NODE_ENV === 'production' || process.env.COOKIE_SECURE === 'true',
+      sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
 
@@ -379,7 +439,7 @@ export const getAttendance = async (req: AuthenticatedRequest, res: Response) =>
     );
 
     // 1. Fetch all users to map names/roles
-    const usersResult = await query('SELECT id, name, email, role, is_active FROM users WHERE is_deleted = false');
+    const usersResult = await query('SELECT id, name, email, role, is_active, staff_type FROM users WHERE is_deleted = false');
     const userMap = new Map<number, any>();
     usersResult.rows.forEach((u: any) => {
       userMap.set(u.id, u);
@@ -412,7 +472,8 @@ export const getAttendance = async (req: AuthenticatedRequest, res: Response) =>
         ...r,
         user_name: u ? u.name : 'Unknown User',
         user_role: u ? u.role : 'Unknown Role',
-        user_email: u ? u.email : ''
+        user_email: u ? u.email : '',
+        user_staff_type: u ? (u.staff_type || 'in-staff') : 'in-staff'
       };
     });
 
@@ -822,3 +883,193 @@ export const requestPasswordReset = async (req: AuthenticatedRequest, res: Respo
   }
 };
 
+/**
+ * POST /auth/attendance-location
+ * Called by frontend after login to tag the active attendance record with GPS coordinates.
+ * For in-staff: validates distance against assigned hospital.
+ * For field-staff: stores coordinates as-is.
+ */
+export const updateAttendanceLocation = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'User context missing.',
+        errorCode: 'AUTH_REQUIRED'
+      });
+    }
+
+    const { gps_latitude, gps_longitude } = req.body;
+
+    if (gps_latitude == null || gps_longitude == null) {
+      return res.status(400).json({
+        success: false,
+        message: 'GPS coordinates (gps_latitude, gps_longitude) are required.',
+        errorCode: 'VALIDATION_ERROR'
+      });
+    }
+
+    // Find the active attendance session for this user
+    const activeResult = await query(
+      "SELECT id FROM attendance WHERE user_id = $1 AND status = 'active' AND is_deleted = false ORDER BY punch_in DESC LIMIT 1",
+      [userId]
+    );
+
+    if (activeResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No active attendance session found.',
+        errorCode: 'NO_ACTIVE_SESSION'
+      });
+    }
+
+    const attendanceId = activeResult.rows[0].id;
+
+    // Get the user's staff_type, assigned hospital, and role
+    const userResult = await query(
+      'SELECT staff_type, assigned_hospital_id, role FROM users WHERE id = $1 AND is_deleted = false',
+      [userId]
+    );
+
+    const userInfo = userResult.rows[0];
+    let locationStatus = 'no_gps';
+
+    if (userInfo.role === 'Superadmin' || userInfo.role === 'Admin' || userInfo.role === 'Co-admin') {
+      locationStatus = 'within_range';
+    } else if (userInfo.staff_type === 'field-staff') {
+      locationStatus = 'field_location';
+    } else if (userInfo.staff_type === 'in-staff' && userInfo.assigned_hospital_id) {
+      // Check distance to assigned hospital
+      const hospitalResult = await query(
+        'SELECT latitude, longitude, allowed_radius, name FROM hospitals WHERE id = $1 AND is_deleted = false',
+        [userInfo.assigned_hospital_id]
+      );
+
+      if (hospitalResult.rows.length > 0) {
+        const hospital = hospitalResult.rows[0];
+        if (hospital.latitude != null && hospital.longitude != null) {
+          const distance = haversineDistance(
+            gps_latitude, gps_longitude,
+            hospital.latitude, hospital.longitude
+          );
+          const allowedRadius = hospital.allowed_radius || 200; // default 200m
+          locationStatus = distance <= allowedRadius ? 'within_range' : 'out_of_range';
+        } else {
+          locationStatus = 'no_hospital_gps';
+        }
+      } else {
+        locationStatus = 'no_hospital_found';
+      }
+    } else {
+      // In-staff with no assigned hospital
+      locationStatus = 'no_hospital_assigned';
+    }
+
+    // Update the attendance record with GPS data
+    await query(
+      `UPDATE attendance SET gps_latitude = $1, gps_longitude = $2, location_status = $3 WHERE id = $4`,
+      [gps_latitude, gps_longitude, locationStatus, attendanceId]
+    );
+
+    // Reverse geocode to get human-readable address (fire-and-forget, non-blocking)
+    reverseGeocode(gps_latitude, gps_longitude)
+      .then((address) => {
+        if (address) {
+          query(
+            `UPDATE attendance SET geo_address = $1 WHERE id = $2`,
+            [address, attendanceId]
+          ).catch((err) => console.error('Failed to save geo_address:', err));
+        }
+      })
+      .catch((err) => console.error('Reverse geocoding failed:', err));
+
+    await logAudit(
+      userId,
+      'ATTENDANCE_LOCATION_UPDATE',
+      'attendance',
+      attendanceId,
+      `Attendance location updated: ${locationStatus} (lat: ${gps_latitude}, lng: ${gps_longitude})`
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        attendance_id: attendanceId,
+        location_status: locationStatus,
+        gps_latitude,
+        gps_longitude
+      }
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      message: err.message || 'Internal server error.',
+      errorCode: 'INTERNAL_ERROR'
+    });
+  }
+};
+
+/**
+ * Haversine formula to calculate distance between two GPS coordinates in meters.
+ */
+function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000; // Earth's radius in meters
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+/**
+ * Reverse geocode GPS coordinates to a human-readable address using OpenStreetMap Nominatim.
+ * Returns a short address like "Srikakulam, Andhra Pradesh" or null if failed.
+ */
+async function reverseGeocode(lat: number, lon: number): Promise<string | null> {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&zoom=14&addressdetails=1`;
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'VVF-Healthcare-App/1.0',
+        'Accept-Language': 'en'
+      }
+    });
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    if (!data || !data.address) return null;
+
+    const addr = data.address;
+    // Build a short, readable location string
+    const parts: string[] = [];
+
+    // Try to get the most specific area name
+    const area = addr.suburb || addr.neighbourhood || addr.village || addr.town || addr.hamlet || '';
+    if (area) parts.push(area);
+
+    // City/district
+    const city = addr.city || addr.city_district || addr.county || addr.state_district || '';
+    if (city && city !== area) parts.push(city);
+
+    // State
+    const state = addr.state || '';
+    if (state) parts.push(state);
+
+    if (parts.length === 0) {
+      // Fallback to display_name (truncated)
+      return data.display_name ? data.display_name.split(',').slice(0, 3).join(', ').trim() : null;
+    }
+
+    return parts.join(', ');
+  } catch (err) {
+    console.error('Reverse geocode error:', err);
+    return null;
+  }
+}

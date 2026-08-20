@@ -45,13 +45,25 @@ export const validateEmployee = (data: any): ValidationResult => {
     }
   }
 
-  // 2. Phone Number (optional/provided check)
+  // 2. Phone Number (mandatory)
   const phone = data.phone !== undefined ? data.phone : '';
-  if (phone) {
-    if (!/^\d+$/.test(phone)) {
-      errors.phone = 'Phone Number must contain only numeric digits.';
-    } else if (phone.length > 10) {
-      errors.phone = 'Phone Number must not exceed 10 digits.';
+  if (phone === null || phone === undefined || phone === '') {
+    errors.phone = 'Phone Number is required.';
+  } else if (!/^\d+$/.test(phone)) {
+    errors.phone = 'Phone Number must contain only numeric digits.';
+  } else if (phone.length !== 10) {
+    errors.phone = 'Phone Number must be exactly 10 digits.';
+  }
+
+  // 3. Date of Birth (mandatory)
+  const dob = data.date_of_birth !== undefined ? data.date_of_birth : '';
+  if (dob === null || dob === undefined || dob === '') {
+    errors.date_of_birth = 'Date of Birth is required.';
+  } else {
+    const selectedDate = new Date(dob);
+    const today = new Date();
+    if (selectedDate > today) {
+      errors.date_of_birth = 'Date of Birth cannot be in the future.';
     }
   }
 

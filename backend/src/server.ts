@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
+import helmet from 'helmet';
+// @ts-ignore
+import * as dotenv from 'dotenv';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -34,12 +36,25 @@ import { requireAuth, authorize } from './middleware/auth';
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Suppress technology headers
+app.disable('x-powered-by');
+
+// Security Middleware (Helmet) - Disable CSP & COEP to avoid breaking frontend dynamic assets
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
+
 // Enable CORS
 const allowedOrigins = [
   'http://localhost:3000',
   'https://localhost:3000',
+  'http://localhost:3005',
+  'https://localhost:3005',
   'http://127.0.0.1:3000',
   'https://127.0.0.1:3000',
+  'http://127.0.0.1:3005',
+  'https://127.0.0.1:3005',
   'https://vvf.thehps.in'
 ];
 if (process.env.ALLOWED_ORIGINS) {
@@ -49,15 +64,25 @@ if (process.env.ALLOWED_ORIGINS) {
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+    // Allow server-to-server or local script requests with no origin
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    // Exact whitelist check
+    const isAllowed = allowedOrigins.some(o => o === origin);
+    
+    if (isAllowed) {
       callback(null, true);
     } else {
+      console.warn(`[CORS Blocked] Request from unauthorized origin: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 204 // Avoid returning content on preflight requests
 }));
 // Body parsers
 app.use(express.json());
@@ -68,7 +93,20 @@ const uploadDir = path.join(__dirname, '../uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
-app.use('/uploads', express.static(uploadDir));
+app.use('/uploads', express.static(uploadDir, {
+  setHeaders: (res) => {
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox;");
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  }
+}));
+
+// Prevent caching of all API responses containing sensitive data
+app.use((req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -103,6 +141,8 @@ app.use('/api/sop-technician/users', requireAuth, authorize(['SOP Technician']),
 app.use('/api/admin', requireAuth, authorize(['Admin']), adminRoutes);
 app.use('/api/doctor', requireAuth, authorize(['Doctor']), doctorRoutes);
 app.use('/api/dental-doctor', requireAuth, authorize(['Dental Doctor']), dentalDoctorRoutes);
+app.use('/api/dentist-junior', requireAuth, authorize(['Dentist Junior']), dentalDoctorRoutes);
+app.use('/api/dental-assistant', requireAuth, authorize(['Dental Assistant']), dentalDoctorRoutes);
 app.use('/api/executive', requireAuth, authorize(['Executive']), executiveRoutes);
 app.use('/api/reception', requireAuth, authorize(['Reception']), receptionRoutes);
 app.use('/api/telecaller', requireAuth, authorize(['Telecaller']), telecallerRoutes);
@@ -112,12 +152,17 @@ app.use('/api/telecaller', requireAuth, authorize(['Telecaller']), telecallerRou
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Unhandled error:', err);
   const status = err.status || 500;
-  const message = err.message || 'Internal server error';
+  
+  // Protect internal systems: sanitize messages in production to prevent leaking db or server internals
+  let message = err.message || 'Internal server error';
+  if (process.env.NODE_ENV === 'production' && status === 500) {
+    message = 'An unexpected error occurred. Please contact system support.';
+  }
+
   res.status(status).json({
     success: false,
     message,
-    errorCode: err.errorCode || 'UNHANDLED_ERROR',
-    error: message
+    errorCode: err.errorCode || 'UNHANDLED_ERROR'
   });
 });
 
@@ -145,3 +190,4 @@ const startServer = async () => {
 };
 
 startServer();
+// Dev reload comment 4

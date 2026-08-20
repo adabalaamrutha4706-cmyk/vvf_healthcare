@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { login, logout, autoLogout, punch, getAttendance, getMe, updateProfile, uploadProfilePhoto, requestPasswordReset } from '../controllers/authController';
+import { login, logout, autoLogout, punch, getAttendance, getMe, updateProfile, uploadProfilePhoto, requestPasswordReset, updateAttendanceLocation } from '../controllers/authController';
 import { requireAuth } from '../middleware/auth';
 import { uploadProfile } from '../middleware/upload';
 
@@ -14,5 +14,6 @@ router.get('/attendance', requireAuth, getAttendance);
 router.put('/profile', requireAuth, updateProfile);
 router.post('/profile/photo', requireAuth, uploadProfile.single('photo'), uploadProfilePhoto);
 router.post('/forgot-password-request', requestPasswordReset);
+router.post('/attendance-location', requireAuth, updateAttendanceLocation);
 
 export default router;

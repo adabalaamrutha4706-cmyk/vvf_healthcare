@@ -7,7 +7,7 @@ import { api } from '../../lib/api';
 import { 
   Clock, Calendar, Monitor, MapPin, 
   TrendingUp, ShieldAlert, CheckCircle,
-  Search, Users, RefreshCw, Filter
+  Search, Users, RefreshCw, Filter, Building2
 } from 'lucide-react';
 import { SelectField } from '../../components/SelectField';
 import { ReportFilterPanel } from '../../components/ReportFilterPanel';
@@ -15,6 +15,7 @@ import { exportToExcel, exportToPDF } from '../../lib/exportUtils';
 
 export default function AttendancePage() {
   const { user, isPunchedIn, activePunchRecord } = useAuth();
+  const isAdminOrSuper = user?.role === 'Admin' || user?.role === 'Superadmin';
   
   // Lists
   const [records, setRecords] = useState<any[]>([]);
@@ -109,13 +110,13 @@ export default function AttendancePage() {
     setError('');
     try {
       const res = await api.auth.getAttendance({
-        search: user?.role === 'Admin' ? search : undefined,
-        role: user?.role === 'Admin' ? filterRole : undefined,
-        status: user?.role === 'Admin' ? filterStatus : undefined,
+        search: isAdminOrSuper ? search : undefined,
+        role: isAdminOrSuper ? filterRole : undefined,
+        status: isAdminOrSuper ? filterStatus : undefined,
         hospital_id: selectedHospitalFilter === 'All' ? undefined : selectedHospitalFilter,
         startDate: filterStartDate,
         endDate: filterEndDate,
-        lateOnly: user?.role === 'Admin' ? filterLateOnly : undefined,
+        lateOnly: isAdminOrSuper ? filterLateOnly : undefined,
         page,
         limit
       });
@@ -137,13 +138,13 @@ export default function AttendancePage() {
     setError('');
     try {
       const res = await api.auth.getAttendance({
-        search: user?.role === 'Admin' ? search : undefined,
-        role: user?.role === 'Admin' ? filterRole : undefined,
-        status: user?.role === 'Admin' ? filterStatus : undefined,
+        search: isAdminOrSuper ? search : undefined,
+        role: isAdminOrSuper ? filterRole : undefined,
+        status: isAdminOrSuper ? filterStatus : undefined,
         hospital_id: selectedHospitalFilter === 'All' ? undefined : selectedHospitalFilter,
         startDate: filterStartDate,
         endDate: filterEndDate,
-        lateOnly: user?.role === 'Admin' ? filterLateOnly : undefined,
+        lateOnly: isAdminOrSuper ? filterLateOnly : undefined,
         page: 1,
         limit: 100000
       });
@@ -193,13 +194,13 @@ export default function AttendancePage() {
     setError('');
     try {
       const res = await api.auth.getAttendance({
-        search: user?.role === 'Admin' ? search : undefined,
-        role: user?.role === 'Admin' ? filterRole : undefined,
-        status: user?.role === 'Admin' ? filterStatus : undefined,
+        search: isAdminOrSuper ? search : undefined,
+        role: isAdminOrSuper ? filterRole : undefined,
+        status: isAdminOrSuper ? filterStatus : undefined,
         hospital_id: selectedHospitalFilter === 'All' ? undefined : selectedHospitalFilter,
         startDate: filterStartDate,
         endDate: filterEndDate,
-        lateOnly: user?.role === 'Admin' ? filterLateOnly : undefined,
+        lateOnly: isAdminOrSuper ? filterLateOnly : undefined,
         page: 1,
         limit: 100000
       });
@@ -261,11 +262,11 @@ export default function AttendancePage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-500 flex items-center gap-2">
-              {user?.role === 'Admin' ? 'Global Shift Activity Monitor' : 'Work Shift Attendance Logs'}
+              {isAdminOrSuper ? 'Global Shift Activity Monitor' : 'Work Shift Attendance Logs'}
               <Clock className="h-5 w-5 text-primary-green" />
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-              {user?.role === 'Admin' 
+              {isAdminOrSuper 
                 ? 'Centralized monitoring panel to track active sessions, verify punch times, and track team shifts.' 
                 : 'Verify punched shifts, monitor active work sessions, and record duration.'}
             </p>
@@ -295,7 +296,7 @@ export default function AttendancePage() {
 
         {/* 3 Work shifts Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {user?.role === 'Admin' ? (
+          {isAdminOrSuper ? (
             <>
               {/* Admin Card 1: Total Logs */}
               <div className="bg-white border border-border-gray rounded-xl p-3 sm:p-5 flex items-center gap-3 sm:gap-4 relative overflow-hidden group shadow-sm">
@@ -395,7 +396,7 @@ export default function AttendancePage() {
                     <p className="text-[9px] text-slate-500 uppercase tracking-wider font-bold">Login Timestamp</p>
                     <p className="text-xs font-bold text-primary-green mt-1">
                       {isPunchedIn && activePunchRecord?.punch_in
-                        ? new Date(activePunchRecord.punch_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        ? new Date(activePunchRecord.punch_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })
                         : '--:--'}
                     </p>
                   </div>
@@ -406,7 +407,7 @@ export default function AttendancePage() {
         </div>
 
         {/* Admin Advanced Filter & Search Panel */}
-        {user?.role === 'Admin' && (
+        {isAdminOrSuper && (
           <div className="bg-white border border-border-gray rounded-xl p-3 sm:p-5 space-y-4 shadow-sm">
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
@@ -481,6 +482,8 @@ export default function AttendancePage() {
                       { value: '', label: 'All Roles' },
                       { value: 'Admin', label: 'Admin' },
                       { value: 'Dental Doctor', label: 'Dental Doctor' },
+                      { value: 'Dentist Junior', label: 'Dentist Junior' },
+                      { value: 'Dental Assistant', label: 'Dental Assistant' },
                       { value: 'Doctor', label: 'Doctor' },
                       { value: 'Reception', label: 'Reception' },
                       { value: 'Telecaller', label: 'Telecaller' },
@@ -554,7 +557,7 @@ export default function AttendancePage() {
           <div>
             <div className="px-6 py-4 border-b border-border-gray bg-secondary-bg">
               <h3 className="font-bold text-xs text-slate-500 uppercase tracking-wider">
-                {user?.role === 'Admin' ? 'Organization Work Shift Logs' : 'Monthly Shift Timesheet'}
+                {isAdminOrSuper ? 'Organization Work Shift Logs' : 'Monthly Shift Timesheet'}
               </h3>
             </div>
 
@@ -575,7 +578,7 @@ export default function AttendancePage() {
                   <table className="w-full text-xs text-left">
                     <thead className="bg-secondary-bg text-slate-500 font-semibold border-b border-border-gray uppercase text-[9px] tracking-wider">
                       <tr>
-                        {user?.role === 'Admin' && (
+                        {isAdminOrSuper && (
                           <>
                             <th className="px-5 py-3.5">Staff Member</th>
                             <th className="px-5 py-3.5">Designation</th>
@@ -586,6 +589,7 @@ export default function AttendancePage() {
                         <th className="px-5 py-3.5">Logout Time</th>
                         <th className="px-5 py-3.5">Session Status</th>
                         <th className="px-5 py-3.5">Device Agent</th>
+                        <th className="px-5 py-3.5">Staff</th>
                         <th className="px-5 py-3.5 text-center">GPS Geotag</th>
                         <th className="px-5 py-3.5 text-right">Duration</th>
                       </tr>
@@ -612,7 +616,7 @@ export default function AttendancePage() {
 
                         return (
                           <tr key={r.id} className="hover:bg-very-light-green/30 text-slate-500 transition-colors">
-                            {user?.role === 'Admin' && (
+                            {isAdminOrSuper && (
                               <>
                                 <td className="px-5 py-4 font-bold text-slate-500">{r.user_name}</td>
                                 <td className="px-5 py-4">
@@ -652,13 +656,61 @@ export default function AttendancePage() {
                                 {r.device_info || 'Unknown Client'}
                               </span>
                             </td>
-                            <td className="px-5 py-4 text-center text-primary-green">
-                              {r.gps_latitude && r.gps_longitude ? (
-                                <span className="inline-flex items-center gap-1 bg-very-light-green px-2 py-0.5 rounded border border-light-green/40">
-                                  <MapPin className="h-3 w-3" />
-                                  Synced
+                            <td className="px-5 py-4">
+                              {(r.user_staff_type || 'in-staff') === 'in-staff' ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-200">
+                                  <Building2 className="h-3 w-3" />
+                                  In-Staff
                                 </span>
-                              ) : '-'}
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-600 border border-amber-200">
+                                  <MapPin className="h-3 w-3" />
+                                  Field-Staff
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-5 py-4 text-center">
+                              {(r.user_staff_type || 'in-staff') === 'in-staff' ? (
+                                r.gps_latitude && r.gps_longitude ? (
+                                  <span className="inline-flex items-center gap-1 bg-very-light-green px-2 py-0.5 rounded border border-light-green/40 text-primary-green text-[10px] font-bold">
+                                    <CheckCircle className="h-3 w-3" />
+                                    Synced
+                                  </span>
+                                ) : (
+                                  r.status === 'active' || !r.punch_out ? (
+                                    <span className="inline-flex items-center gap-1 text-amber-500 text-[10px] font-semibold animate-pulse">
+                                      <MapPin className="h-3 w-3" />
+                                      Locating...
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400 text-[10px]">-</span>
+                                  )
+                                )
+                              ) : (
+                                r.gps_latitude && r.gps_longitude ? (
+                                  <a
+                                    href={`https://www.google.com/maps?q=${r.gps_latitude},${r.gps_longitude}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 text-amber-700 text-[10px] font-semibold hover:bg-amber-100 transition-colors max-w-[220px]"
+                                    title={`${Number(r.gps_latitude).toFixed(5)}, ${Number(r.gps_longitude).toFixed(5)}`}
+                                  >
+                                    <MapPin className="h-3 w-3 shrink-0" />
+                                    <span className="truncate">
+                                      {r.geo_address || `${Number(r.gps_latitude).toFixed(4)}, ${Number(r.gps_longitude).toFixed(4)}`}
+                                    </span>
+                                  </a>
+                                ) : (
+                                  r.status === 'active' || !r.punch_out ? (
+                                    <span className="inline-flex items-center gap-1 text-amber-500 text-[10px] font-semibold animate-pulse">
+                                      <MapPin className="h-3 w-3" />
+                                      Locating...
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400 text-[10px]">-</span>
+                                  )
+                                )
+                              )}
                             </td>
                             <td className="px-5 py-4 text-right font-bold text-slate-500">{durationStr}</td>
                           </tr>
@@ -693,12 +745,12 @@ export default function AttendancePage() {
                       <div key={r.id} className="p-4 space-y-3 hover:bg-very-light-green/10 transition-colors">
                         <div className="flex justify-between items-start gap-2">
                           <div>
-                            {user?.role === 'Admin' ? (
+                            {isAdminOrSuper ? (
                               <h4 className="font-bold text-slate-500 text-sm leading-tight">{r.user_name}</h4>
                             ) : (
                               <h4 className="font-bold text-slate-500 text-sm leading-tight">{dateStr}</h4>
                             )}
-                            {user?.role === 'Admin' && (
+                            {isAdminOrSuper && (
                               <p className="text-[10px] text-slate-500 mt-0.5">{dateStr}</p>
                             )}
                           </div>
@@ -719,7 +771,7 @@ export default function AttendancePage() {
                           </div>
                         </div>
 
-                        {user?.role === 'Admin' && (
+                        {isAdminOrSuper && (
                           <div className="text-[10px] flex items-center gap-1.5">
                             <span className="text-slate-500 font-semibold uppercase">Role:</span>
                             <span className="text-primary-green font-bold uppercase text-[9px] bg-very-light-green border border-light-green/45 px-2 py-0.5 rounded">
@@ -742,9 +794,36 @@ export default function AttendancePage() {
                             <span className="text-slate-500 font-bold font-mono">{durationStr}</span>
                           </div>
                           <div>
-                            <span className="text-slate-500 block text-[9px] font-bold uppercase tracking-wider">GPS Coordinates</span>
+                            <span className="text-slate-500 block text-[9px] font-bold uppercase tracking-wider">Staff Type</span>
+                            {(r.user_staff_type || 'in-staff') === 'in-staff' ? (
+                              <span className="inline-flex items-center gap-1 text-blue-600 font-bold text-[10px]">
+                                <Building2 className="h-2.5 w-2.5" />
+                                In-Staff
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-amber-600 font-bold text-[10px]">
+                                <MapPin className="h-2.5 w-2.5" />
+                                Field-Staff
+                              </span>
+                            )}
+                          </div>
+                          <div className="col-span-2">
+                            <span className="text-slate-500 block text-[9px] font-bold uppercase tracking-wider">GPS Location</span>
                             <span className="text-slate-500 font-medium">
-                              {r.gps_latitude && r.gps_longitude ? '📍 Geotagged' : 'No Geotag'}
+                              {(r.user_staff_type || 'in-staff') === 'in-staff' ? (
+                                r.gps_latitude && r.gps_longitude ? '✅ Synced' : (r.status === 'active' || !r.punch_out ? '📡 Locating...' : '-')
+                              ) : (
+                                r.gps_latitude && r.gps_longitude ? (
+                                  <a
+                                    href={`https://www.google.com/maps?q=${r.gps_latitude},${r.gps_longitude}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-amber-600 underline font-semibold"
+                                  >
+                                    📍 {r.geo_address || `${Number(r.gps_latitude).toFixed(4)}, ${Number(r.gps_longitude).toFixed(4)}`}
+                                  </a>
+                                ) : (r.status === 'active' || !r.punch_out ? '📡 Locating...' : '-')
+                              )}
                             </span>
                           </div>
                         </div>

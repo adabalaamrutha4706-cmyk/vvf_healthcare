@@ -515,7 +515,7 @@ function VisitsContent() {
       setCurrentLat(pos.coords.latitude);
       setCurrentLng(pos.coords.longitude);
       setCurrentAccuracy(pos.coords.accuracy);
-      setGpsTimestamp(new Date(pos.timestamp).toLocaleTimeString());
+      setGpsTimestamp(new Date(pos.timestamp).toLocaleTimeString([], { hour12: true }));
       
       setGpsUpdateCount(prev => {
         const nextCount = prev + 1;
@@ -749,7 +749,7 @@ function VisitsContent() {
         setAdminLat(pos.coords.latitude);
         setAdminLng(pos.coords.longitude);
         setAdminAccuracy(pos.coords.accuracy);
-        setAdminGpsTimestamp(new Date(pos.timestamp).toLocaleTimeString());
+        setAdminGpsTimestamp(new Date(pos.timestamp).toLocaleTimeString([], { hour12: true }));
         
         setAdminGpsUpdateCount(prev => {
           const nextCount = prev + 1;
@@ -1487,7 +1487,7 @@ function VisitsContent() {
               className="shrink-0 bg-primary-green hover:bg-primary-green-hover text-white font-semibold text-xs py-2.5 px-5 rounded-xl cursor-pointer transition-all shadow-lg shadow-emerald-950/20 flex items-center gap-2"
             >
               <Play className="h-3.5 w-3.5 fill-current" />
-              Check In At Partner Hospital
+              Check In At Hospital
             </button>
           </div>
         )}
@@ -1657,7 +1657,7 @@ function VisitsContent() {
                     <thead className="bg-white/60 text-slate-500 font-semibold border-b border-border-gray uppercase text-[9px] tracking-wider">
                       <tr>
                         <th className="px-5 py-3.5">Executive</th>
-                        <th className="px-5 py-3.5">Partner Hospital</th>
+                        <th className="px-5 py-3.5">Hospital</th>
                         <th className="px-5 py-3.5">Check-In Info</th>
                         <th className="px-5 py-3.5">Check-Out Info</th>
                         <th className="px-5 py-3.5">Duration</th>
@@ -1796,9 +1796,9 @@ function VisitsContent() {
                         </div>
                         <div className="bg-white/60 p-2.5 rounded-lg border border-border-gray text-xs space-y-1">
                           <p className="text-slate-500"><span className="font-semibold text-slate-500">Hospital:</span> {vis.hospital_name} ({vis.hospital_city})</p>
-                          <p className="text-slate-500"><span className="font-semibold text-slate-500">Check-In:</span> {new Date(vis.start_time || vis.checkin_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                          <p className="text-slate-500"><span className="font-semibold text-slate-500">Check-In:</span> {new Date(vis.start_time || vis.checkin_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}</p>
                           {vis.checkout_time ? (
-                            <p className="text-slate-500"><span className="font-semibold text-slate-500">Check-Out:</span> {new Date(vis.checkout_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ({vis.duration_minutes} mins)</p>
+                            <p className="text-slate-500"><span className="font-semibold text-slate-500">Check-Out:</span> {new Date(vis.checkout_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })} ({vis.duration_minutes} mins)</p>
                           ) : (
                             <p className="text-slate-500"><span className="font-semibold text-slate-500">Check-Out:</span> <span className="italic text-slate-500">Active</span></p>
                           )}
@@ -1833,7 +1833,7 @@ function VisitsContent() {
                     </div>
 
                     <div className="flex flex-col gap-2 shrink-0">
-                      {user?.role === 'Admin' && selectedVisitDetails.status === 'Completed' && (
+                      {(user?.role === 'Admin' || user?.role === 'Superadmin') && selectedVisitDetails.status === 'Completed' && (
                         <button
                           id="btn-verify-visit-timeline"
                           onClick={() => handleVerify(selectedVisitDetails.id)}
@@ -1843,7 +1843,7 @@ function VisitsContent() {
                         </button>
                       )}
                       
-                      {user?.role === 'Admin' && (selectedVisitDetails.status === 'Completed' || selectedVisitDetails.status === 'Expired' || selectedVisitDetails.status === 'Verified') && (
+                      {(user?.role === 'Admin' || user?.role === 'Superadmin') && (selectedVisitDetails.status === 'Completed' || selectedVisitDetails.status === 'Expired' || selectedVisitDetails.status === 'Verified') && (
                         <button
                           id="btn-reopen-visit-timeline"
                           onClick={() => handleReopen(selectedVisitDetails.id)}
@@ -2307,7 +2307,7 @@ function VisitsContent() {
                     </div>
                   )}
                   <div className="relative min-w-0 max-w-full">
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Select Partner Hospital</label>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Select Hospital</label>
                     
                     {/* Dropdown Trigger */}
                     <button
@@ -2320,7 +2320,7 @@ function VisitsContent() {
                         {selectedHosp ? (
                           `🏥 ${selectedHosp.name} (${selectedHosp.hospital_uid || 'UID Pending'} - ${selectedHosp.city})`
                         ) : (
-                          <span className="text-slate-500">Select Partner Hospital</span>
+                          <span className="text-slate-500">Select Hospital</span>
                         )}
                       </span>
                       <svg
@@ -2533,7 +2533,7 @@ function VisitsContent() {
                   <div>
                     <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Hospital / Clinic</label>
                     <div className="text-xs font-semibold text-slate-500 bg-secondary-bg/40 border border-border-gray/50 p-2.5 rounded-xl">
-                      🏥 {activeVisit.hospital_name || 'Partner Hospital'}
+                      🏥 {activeVisit.hospital_name || 'Hospital'}
                     </div>
                   </div>
 

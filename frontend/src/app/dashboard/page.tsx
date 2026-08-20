@@ -183,6 +183,16 @@ export default function Dashboard() {
                 Here is your personalized clinician dashboard.
               </p>
             </div>
+            <div className="flex flex-wrap gap-2">
+              <Link 
+                id="quick-add-appointment-clinician"
+                href={`${getRolePrefix(user?.role || '')}/appointments?new=true`}
+                className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-white bg-primary-green hover:bg-primary-green-hover rounded-xl transition-all shadow-sm cursor-pointer"
+              >
+                <PlusCircle className="h-4 w-4" />
+                Schedule Appointment
+              </Link>
+            </div>
           </div>
 
           {error && (
@@ -320,11 +330,19 @@ export default function Dashboard() {
             
             <div className="flex flex-wrap gap-2">
               <Link 
-                id="quick-add-field-lead"
-                href={`${getRolePrefix(user?.role || '')}/field-appointments`}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-primary-green hover:bg-primary-green-hover rounded-xl transition-all shadow-sm"
+                id="quick-add-appointment-exec"
+                href={`${getRolePrefix(user?.role || '')}/appointments?new=true`}
+                className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-white bg-primary-green hover:bg-primary-green-hover rounded-xl transition-all shadow-sm cursor-pointer"
               >
                 <PlusCircle className="h-4 w-4" />
+                Schedule Appointment
+              </Link>
+              <Link 
+                id="quick-add-field-lead"
+                href={`${getRolePrefix(user?.role || '')}/field-appointments`}
+                className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-primary-green bg-white hover:bg-very-light-green border border-primary-green hover:border-primary-green-hover rounded-xl transition-all cursor-pointer"
+              >
+                <PlusCircle className="h-4 w-4 text-primary-green" />
                 New Field Lead
               </Link>
             </div>
@@ -491,14 +509,14 @@ export default function Dashboard() {
           
           {/* Action pill/shortcuts based on user roles */}
           <div className="flex flex-wrap gap-2">
-            {['Admin', 'Reception'].includes(user?.role || '') && (
+            {(user?.role) && (
               <Link 
                 id="quick-add-appointment"
-                href="/appointments?new=true"
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-primary-green hover:bg-primary-green-hover rounded-xl transition-all shadow-sm"
+                href={`${getRolePrefix(user?.role || '')}/appointments?new=true`}
+                className="flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-white bg-primary-green hover:bg-primary-green-hover rounded-xl transition-all shadow-sm cursor-pointer"
               >
                 <PlusCircle className="h-4 w-4" />
-                New Appointment
+                Schedule Appointment
               </Link>
             )}
             {['Admin', 'Executive'].includes(user?.role || '') && (

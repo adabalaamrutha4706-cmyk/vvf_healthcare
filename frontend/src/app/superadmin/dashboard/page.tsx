@@ -6,7 +6,7 @@ import { DashboardLayout } from '../../../components/DashboardLayout';
 import { api } from '../../../lib/api';
 import { 
   ShieldAlert, Users, Clock, Database, Calendar, TrendingUp, AlertTriangle, 
-  Trash2, RotateCcw, Plus, Edit2, Search, Check, X, Eye, IndianRupee, MapPin, 
+  Trash2, RotateCcw, Plus, Edit2, Search, Check, X, Eye, EyeOff, IndianRupee, MapPin, 
   FileText, Activity, RefreshCw, KeyRound, Monitor, ShieldCheck, Settings
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -49,6 +49,7 @@ export default function SuperadminDashboard() {
     password_change_limit: 3,
     password_change_locked: false
   });
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (user?.role === 'Superadmin') {
@@ -98,6 +99,7 @@ export default function SuperadminDashboard() {
       password_change_limit: 3,
       password_change_locked: false
     });
+    setShowPassword(false);
     setIsUserModalOpen(true);
   };
 
@@ -114,6 +116,7 @@ export default function SuperadminDashboard() {
       password_change_limit: u.password_change_limit != null ? u.password_change_limit : 3,
       password_change_locked: !!u.password_change_locked
     });
+    setShowPassword(false);
     setIsUserModalOpen(true);
   };
 
@@ -1175,6 +1178,7 @@ export default function SuperadminDashboard() {
                     <input
                       type="text"
                       required
+                      maxLength={100}
                       value={userForm.name}
                       onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
                       placeholder="Jane Doe"
@@ -1187,6 +1191,7 @@ export default function SuperadminDashboard() {
                     <input
                       type="email"
                       required
+                      maxLength={100}
                       value={userForm.email}
                       onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
                       placeholder="jane@vvf.org"
@@ -1198,9 +1203,10 @@ export default function SuperadminDashboard() {
                     <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Contact Phone</label>
                     <input
                       type="text"
+                      maxLength={10}
                       value={userForm.phone}
-                      onChange={(e) => setUserForm({ ...userForm, phone: e.target.value })}
-                      placeholder="+91 9999999999"
+                      onChange={(e) => setUserForm({ ...userForm, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                      placeholder="9876543210"
                       className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none"
                     />
                   </div>
@@ -1227,14 +1233,28 @@ export default function SuperadminDashboard() {
                     <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
                       {editingUser ? 'New Password (leave empty to retain current)' : 'Password'}
                     </label>
-                    <input
-                      type="password"
-                      required={!editingUser}
-                      value={userForm.password}
-                      onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
-                      placeholder="••••••••"
-                      className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        required={!editingUser}
+                        maxLength={50}
+                        value={userForm.password}
+                        onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                        placeholder="••••••••"
+                        className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 pl-3 pr-10 text-xs text-slate-500 outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-650 cursor-pointer"
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
                   </div>
 
                   {editingUser && (

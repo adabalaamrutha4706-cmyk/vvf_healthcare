@@ -8,7 +8,8 @@ import {
   restoreAppointment,
   getPendingPayments,
   getAppointmentEditHistory,
-  moveAppointmentToTelecalling
+  moveAppointmentToTelecalling,
+  lookupPatient
 } from '../controllers/appointmentController';
 import { addPayment, getPaymentHistory, getPaymentsReport, updatePayment } from '../controllers/paymentController';
 import { requireAuth, requireRole } from '../middleware/auth';
@@ -16,6 +17,7 @@ import { requireAuth, requireRole } from '../middleware/auth';
 const router = Router();
 
 // Appointments CRUD
+router.get('/patients/lookup', requireAuth, lookupPatient);
 router.get('/', requireAuth, getAppointments);
 router.get('/pending-payments', requireAuth, requireRole(['Admin', 'Superadmin', 'Reception', 'Doctor', 'Dental Doctor']), getPendingPayments);
 router.get('/payments-report', requireAuth, requireRole(['Admin', 'Superadmin', 'Reception']), getPaymentsReport);

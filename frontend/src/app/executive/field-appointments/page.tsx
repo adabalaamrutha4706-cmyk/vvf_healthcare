@@ -107,6 +107,27 @@ export default function ExecutiveFieldAppointments() {
     }
 
     setSubmitLoading(true);
+    let locationData: { latitude: number | null, longitude: number | null } = { latitude: null, longitude: null };
+    try {
+      if (navigator.geolocation) {
+        const position = await new Promise<any>((resolve) => {
+          navigator.geolocation.getCurrentPosition(resolve, () => resolve(null), {
+            enableHighAccuracy: true,
+            timeout: 5000,
+            maximumAge: 0
+          });
+        });
+        if (position && position.coords) {
+          locationData = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('Geolocation retrieval failed or rejected:', e);
+    }
+
     try {
       const res = await api.fieldAppointments.create({
         full_name,
@@ -114,7 +135,9 @@ export default function ExecutiveFieldAppointments() {
         gender,
         phone_number: phone_number.trim(),
         appointment_type,
-        medical_history
+        medical_history,
+        added_latitude: locationData.latitude,
+        added_longitude: locationData.longitude
       });
 
       setFormSuccess(`Lead registered successfully! Lead ID: ${res.data?.patient_lead_id || res.patient_lead_id}`);
@@ -164,7 +187,7 @@ export default function ExecutiveFieldAppointments() {
       day: '2-digit',
       month: 'short',
       year: 'numeric'
-    }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
   };
 
   return (
@@ -218,6 +241,7 @@ export default function ExecutiveFieldAppointments() {
                   <input
                     type="text"
                     required
+                    maxLength={100}
                     value={formData.full_name}
                     onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
                     placeholder="Enter patient full name"
@@ -237,8 +261,12 @@ export default function ExecutiveFieldAppointments() {
                     required
                     min="1"
                     max="120"
+                    maxLength={3}
                     value={formData.age}
-                    onChange={(e) => setFormData({ ...formData, age: e.target.value })}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v.length <= 3) setFormData({ ...formData, age: v });
+                    }}
                     placeholder="Age"
                     className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-primary-green focus:bg-white transition-all"
                   />
@@ -308,6 +336,7 @@ export default function ExecutiveFieldAppointments() {
                   <Clipboard className="absolute left-3.5 top-3 h-4 w-4 text-slate-400" />
                   <textarea
                     rows={4}
+                    maxLength={1000}
                     value={formData.medical_history}
                     onChange={(e) => setFormData({ ...formData, medical_history: e.target.value })}
                     placeholder="Allergies, chronic conditions, treatment histories, etc."
@@ -477,6 +506,7 @@ export default function ExecutiveFieldAppointments() {
                         <th className="px-4 py-4">Age / Sex</th>
                         <th className="px-4 py-4">Phone Number</th>
                         <th className="px-4 py-4">Requirement</th>
+                        <th className="px-4 py-4">Submission Location</th>
                         <th className="px-4 py-4">Created Date</th>
                         <th className="px-5 py-4">Status</th>
                       </tr>
@@ -500,6 +530,20 @@ export default function ExecutiveFieldAppointments() {
                             <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
                               {item.appointment_type}
                             </span>
+                          </td>
+                          <td className="px-4 py-4 text-slate-500 max-w-[200px] truncate" title={item.added_location_address || 'Not Available'}>
+                            {item.added_latitude && item.added_longitude ? (
+                              <a
+                                href={`https://www.google.com/maps/search/?api=1&query=${item.added_latitude},${item.added_longitude}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="hover:text-primary-green hover:underline font-bold transition-colors cursor-pointer"
+                              >
+                                {item.added_location_address || 'View Location'}
+                              </a>
+                            ) : (
+                              item.added_location_address || 'Not Available'
+                            )}
                           </td>
                           <td className="px-4 py-4 text-slate-400 font-medium" title={formatDate(item.created_at)}>
                             {formatDate(item.created_at).split(' ')[0]}

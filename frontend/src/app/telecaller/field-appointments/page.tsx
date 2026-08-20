@@ -152,7 +152,7 @@ export default function TelecallerFieldAppointments() {
       day: '2-digit',
       month: 'short',
       year: 'numeric'
-    }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
   };
 
   const openActionModal = (lead: any) => {
@@ -350,6 +350,7 @@ export default function TelecallerFieldAppointments() {
                     <th className="px-4 py-4">Follow-ups</th>
                     <th className="px-4 py-4 text-max-w-xs">Telecaller Notes</th>
                     <th className="px-4 py-4 font-normal">Executive Name</th>
+                    <th className="px-4 py-4">Submission Location</th>
                     <th className="px-4 py-4">Status</th>
                     <th className="px-5 py-4 text-center">Interact</th>
                   </tr>
@@ -393,6 +394,20 @@ export default function TelecallerFieldAppointments() {
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-slate-450">
                         {item.executive_name}
+                      </td>
+                      <td className="px-4 py-4 text-slate-500 max-w-[200px] truncate" title={item.added_location_address || 'Not Available'}>
+                        {item.added_latitude && item.added_longitude ? (
+                          <a
+                            href={`https://www.google.com/maps/search/?api=1&query=${item.added_latitude},${item.added_longitude}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:text-primary-green hover:underline font-bold transition-colors cursor-pointer"
+                          >
+                            {item.added_location_address || 'View Location'}
+                          </a>
+                        ) : (
+                          item.added_location_address || 'Not Available'
+                        )}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
                         <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${getStatusColor(item.lead_status || item.status || 'New Lead')}`}>

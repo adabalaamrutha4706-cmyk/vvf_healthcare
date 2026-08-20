@@ -9,18 +9,23 @@ export const getToken = (): string | null => {
   return null;
 };
 
-// Helper to save token to localStorage
+// Helper to save token to localStorage and cookies
 export const setToken = (token: string) => {
   if (typeof window !== 'undefined') {
     localStorage.setItem('vvf_token', token);
+    // Write standard browser cookie for Next.js Middleware access
+    const isSecure = window.location.protocol === 'https:';
+    document.cookie = `token=${encodeURIComponent(token)}; path=/; max-age=86400; SameSite=Lax${isSecure ? '; Secure' : ''}`;
   }
 };
 
-// Helper to remove token from localStorage
+// Helper to remove token from localStorage and cookies
 export const removeToken = () => {
   if (typeof window !== 'undefined') {
     localStorage.removeItem('vvf_token');
     localStorage.removeItem('vvf_role');
+    // Clear standard browser cookie
+    document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
   }
 };
 
@@ -49,8 +54,10 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
     let prefix = '';
     if (role) {
       const r = role.toLowerCase().trim();
-      if (r === 'admin') prefix = '/admin';
+      if (r === 'admin' || r === 'co-admin') prefix = '/admin';
       else if (r === 'dental doctor') prefix = '/dental-doctor';
+      else if (r === 'dentist junior') prefix = '/dentist-junior';
+      else if (r === 'dental assistant') prefix = '/dental-assistant';
       else if (r === 'doctor') prefix = '/doctor';
       else if (r === 'executive') prefix = '/executive';
       else if (r === 'reception') prefix = '/reception';
@@ -101,7 +108,7 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
 export const api = {
   // Auth API
   auth: {
-    login: (credentials: { email: string; password: string }) => 
+    login: (credentials: { email: string; password: string; latitude?: number; longitude?: number }) => 
       request('/auth/login', { method: 'POST', body: JSON.stringify(credentials) }),
     logout: () => request('/auth/logout', { method: 'POST' }),
     autoLogout: () => request('/auth/auto-logout', { method: 'POST' }),
@@ -147,7 +154,9 @@ export const api = {
     }) =>
       request('/auth/profile', { method: 'PUT', body: JSON.stringify(data) }),
     uploadProfilePhoto: (formData: FormData) =>
-      request('/auth/profile/photo', { method: 'POST', body: formData })
+      request('/auth/profile/photo', { method: 'POST', body: formData }),
+    updateAttendanceLocation: (data: { gps_latitude: number; gps_longitude: number }) =>
+      request('/auth/attendance-location', { method: 'POST', body: JSON.stringify(data) })
   },
 
   // Dashboard API
@@ -199,6 +208,17 @@ export const api = {
     update: (id: number, data: any) => request(`/appointments/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: number) => request(`/appointments/${id}`, { method: 'DELETE' }),
     restore: (id: number) => request(`/appointments/${id}/restore`, { method: 'PUT' }),
+    lookupPatient: (params: { name?: string; phone?: string; patient_id?: string }) => {
+      let url = '/appointments/patients/lookup';
+      const parts: string[] = [];
+      if (params.name) parts.push(`name=${encodeURIComponent(params.name)}`);
+      if (params.phone) parts.push(`phone=${encodeURIComponent(params.phone)}`);
+      if (params.patient_id) parts.push(`patient_id=${encodeURIComponent(params.patient_id)}`);
+      if (parts.length > 0) {
+        url += '?' + parts.join('&');
+      }
+      return request(url);
+    },
     moveToTelecalling: (id: number, data: {
       phone_number: string;
       outreach_status: string;

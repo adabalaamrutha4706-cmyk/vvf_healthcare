@@ -427,7 +427,7 @@ export default function TelecallerPage() {
                             <div className="flex items-center gap-2 text-slate-500 font-semibold">
                               <Calendar className="h-3.5 w-3.5 text-alert-text" />
                               <span>
-                                Callback: {callback.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} • {callback.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                Callback: {callback.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} • {callback.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
                               </span>
                             </div>
                           )}

@@ -9,10 +9,11 @@ import {
   LayoutDashboard, Calendar, CreditCard, Building2, MapPin, 
   PhoneCall, Users2, Settings, LogOut, Bell, Menu, X, 
   Play, Square, Map, Moon, Sun, Clock, Home, CalendarDays, ClipboardCheck,
-  Camera, RefreshCw, Activity, BarChart3, Target
+  Camera, RefreshCw, Activity, BarChart3, Target, ChevronDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HeaderProfilePanel } from './HeaderProfilePanel';
+import { SelectField } from './SelectField';
 
 interface SidebarItem {
   name: string;
@@ -23,21 +24,22 @@ interface SidebarItem {
 
 const SIDEBAR_ITEMS: SidebarItem[] = [
   { name: 'Superadmin Panel', href: '/superadmin/dashboard', icon: LayoutDashboard, roles: ['Superadmin'] },
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['Admin', 'Dental Doctor', 'Doctor', 'Reception', 'Telecaller', 'Executive', 'OP Technician', 'SOP Technician'] },
-  { name: 'Appointments', href: '/appointments', icon: Calendar, roles: ['Admin', 'Doctor', 'Dental Doctor', 'Reception', 'Superadmin', 'OP Technician', 'SOP Technician'] },
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['Admin', 'Dental Doctor', 'Dentist Junior', 'Dental Assistant', 'Doctor', 'Reception', 'Telecaller', 'Executive', 'OP Technician', 'SOP Technician'] },
+  { name: 'Clinical Worklist', href: '/clinical-worklists', icon: ClipboardCheck, roles: ['OP Technician', 'SOP Technician'] },
+  { name: 'Appointments', href: '/appointments', icon: Calendar, roles: ['Admin', 'Doctor', 'Dental Doctor', 'Dentist Junior', 'Dental Assistant', 'Reception', 'Superadmin', 'OP Technician', 'SOP Technician'] },
   { name: 'Field leads', href: '/field-appointments', icon: CalendarDays, roles: ['Executive', 'Admin', 'Superadmin', 'Telecaller'] },
-  { name: 'Attendance', href: '/attendance', icon: Clock, roles: ['Admin', 'Dental Doctor', 'Doctor', 'Reception', 'Telecaller', 'Executive', 'Superadmin', 'OP Technician', 'SOP Technician'] },
+  { name: 'Attendance', href: '/attendance', icon: Clock, roles: ['Admin', 'Dental Doctor', 'Dentist Junior', 'Dental Assistant', 'Doctor', 'Reception', 'Telecaller', 'Executive', 'Superadmin', 'OP Technician', 'SOP Technician'] },
   { name: 'Field Visits', href: '/visits?type=field', icon: MapPin, roles: ['Admin', 'Executive', 'Superadmin'] },
   { name: 'Dental Visits', href: '/visits?type=dental', icon: MapPin, roles: ['Admin', 'Executive', 'Superadmin'] },
   { name: 'Payments', href: '/payments', icon: CreditCard, roles: ['Admin', 'Superadmin', 'Reception'] },
   { name: 'Hospitals', href: '/hospitals', icon: Building2, roles: ['Admin', 'Superadmin'] },
   { name: 'Telecalling', href: '/telecaller', icon: PhoneCall, roles: ['Admin', 'Telecaller', 'Superadmin'] },
-  { name: 'Therapies', href: '/therapies', icon: Activity, roles: ['Admin', 'Superadmin'] },
-  { name: 'Session History', href: '/therapies/history', icon: ClipboardCheck, roles: ['Admin', 'Superadmin'] },
+  { name: 'Therapies', href: '/therapies', icon: Activity, roles: ['Admin', 'Superadmin', 'OP Technician', 'SOP Technician'] },
+  { name: 'Session History', href: '/therapies/history', icon: ClipboardCheck, roles: ['Admin', 'Superadmin', 'OP Technician', 'SOP Technician'] },
   { name: 'User Management', href: '/users', icon: Users2, roles: ['Admin', 'Superadmin'] },
   { name: 'Daily Reports', href: '/reports', icon: BarChart3, roles: ['Admin', 'Superadmin'] },
   { name: 'Target Management', href: '/targets', icon: Target, roles: ['Admin', 'Superadmin'] },
-  { name: 'Settings', href: '/settings', icon: Settings, roles: ['Admin', 'Dental Doctor', 'Doctor', 'Reception', 'Telecaller', 'Executive', 'Superadmin', 'OP Technician', 'SOP Technician'] },
+  { name: 'Settings', href: '/settings', icon: Settings, roles: ['Admin', 'Dental Doctor', 'Dentist Junior', 'Dental Assistant', 'Doctor', 'Reception', 'Telecaller', 'Executive', 'Superadmin', 'OP Technician', 'SOP Technician'] },
 ];
 
 function calculateAge(dobStr?: string | null): string {
@@ -83,19 +85,70 @@ function DetailCard({ label, value, isStatus, status }: { label: string; value: 
 }
 
 export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, logout, isPunchedIn, triggerPunch, activePunchRecord, updateUser } = useAuth();
+  const { user, activeRole, setActiveRole, logout, isPunchedIn, triggerPunch, activePunchRecord, updateUser, loading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const [currentTime, setCurrentTime] = useState('');
+  const [loginTime, setLoginTime] = useState('--:--:--');
   const [punchLoading, setPunchLoading] = useState(false);
   const [showAllNotificationsModal, setShowAllNotificationsModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState('');
+  const [sidebarWidth, setSidebarWidth] = useState<number>(256);
+  const [isResizing, setIsResizing] = useState<boolean>(false);
+
+  // Load saved sidebar width and login time on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedWidth = localStorage.getItem('vvf_sidebar_width');
+      if (savedWidth) {
+        const parsed = parseInt(savedWidth, 10);
+        if (parsed >= 180 && parsed <= 450) {
+          setSidebarWidth(parsed);
+        }
+      }
+      
+      const loginTimeStr = localStorage.getItem('vvf_login_time');
+      if (loginTimeStr) {
+        const loginDate = new Date(loginTimeStr);
+        if (!Number.isNaN(loginDate.getTime())) {
+          setLoginTime(loginDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }));
+        }
+      }
+    }
+  }, []);
+
+  const startResizing = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      // Constrain sidebar width between 180px and 450px
+      const newWidth = Math.max(180, Math.min(450, e.clientX));
+      setSidebarWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      localStorage.setItem('vvf_sidebar_width', sidebarWidth.toString());
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing, sidebarWidth]);
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -186,20 +239,12 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
     const today = new Date();
     const isToday = date.toDateString() === today.toDateString();
     if (isToday) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
     }
-    return date.toLocaleDateString([], { day: '2-digit', month: 'short' }) + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleDateString([], { day: '2-digit', month: 'short' }) + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
   };
 
-  useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      setCurrentTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-    };
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
-  }, []);
+
 
   // Fetch notifications
   useEffect(() => {
@@ -226,71 +271,50 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
   }, [user]);
 
   // If loading or no user, wait (routes will be guarded)
-  const getLoginPath = (role: string) => {
-    const r = role.toLowerCase().trim();
-    if (r === 'dental doctor') return '/dental-doctor/login';
-    if (r === 'op technician') return '/op-technician/login';
-    if (r === 'sop technician') return '/sop-technician/login';
-    return `/${r}/login`;
+  const getLoginPath = (role?: string) => {
+    return '/login';
   };
 
   const getRolePrefix = (role: string): string => {
     const r = role.toLowerCase().trim();
-    if (r === 'admin' || r === 'superadmin') return '/admin';
-    if (r === 'dental doctor') return '/dental-doctor';
-    if (r === 'doctor') return '/doctor';
-    if (r === 'executive') return '/executive';
-    if (r === 'reception') return '/reception';
-    if (r === 'telecaller') return '/telecaller';
-    if (r === 'op technician') return '/op-technician';
-    if (r === 'sop technician') return '/sop-technician';
-    return '';
+    if (r === 'admin' || r === 'superadmin' || r === 'co-admin') return '/admin';
+    return `/${r.replace(/\s+/g, '-')}`;
   };
 
   // Guard routing & handle redirects
   useEffect(() => {
+    if (loading) return;
     const token = localStorage.getItem('vvf_token');
     if (!token) {
-      if (pathname.startsWith('/admin')) {
-        router.push('/admin/login');
-      } else if (pathname.startsWith('/dental-doctor')) {
-        router.push('/dental-doctor/login');
-      } else if (pathname.startsWith('/doctor')) {
-        router.push('/doctor/login');
-      } else if (pathname.startsWith('/executive')) {
-        router.push('/executive/login');
-      } else if (pathname.startsWith('/reception')) {
-        router.push('/reception/login');
-      } else if (pathname.startsWith('/telecaller')) {
-        router.push('/telecaller/login');
-      } else if (pathname.startsWith('/op-technician')) {
-        router.push('/op-technician/login');
-      } else if (pathname.startsWith('/sop-technician')) {
-        router.push('/sop-technician/login');
-      } else {
-        router.push('/login');
-      }
-    } else if (user) {
-      const isSuper = user.role === 'Superadmin';
-      if (pathname.startsWith('/admin') && user.role !== 'Admin' && !isSuper) {
-        logout('/admin/login');
-      } else if (pathname.startsWith('/dental-doctor') && user.role !== 'Dental Doctor' && !isSuper) {
-        logout('/dental-doctor/login');
-      } else if (pathname.startsWith('/doctor') && user.role !== 'Doctor' && !isSuper) {
-        logout('/doctor/login');
-      } else if (pathname.startsWith('/executive') && user.role !== 'Executive' && !isSuper) {
-        logout('/executive/login');
-      } else if (pathname.startsWith('/reception') && user.role !== 'Reception' && !isSuper) {
-        logout('/reception/login');
-      } else if (pathname.startsWith('/telecaller') && user.role !== 'Telecaller' && !isSuper) {
-        logout('/telecaller/login');
-      } else if (pathname.startsWith('/op-technician') && user.role !== 'OP Technician' && !isSuper) {
-        logout('/op-technician/login');
-      } else if (pathname.startsWith('/sop-technician') && user.role !== 'SOP Technician' && !isSuper) {
-        logout('/sop-technician/login');
+      router.push('/login');
+    } else if (user && activeRole) {
+      const userRoles = (user.role || '').split(',').map((r: string) => r.trim().toLowerCase());
+      
+      let pathRole = '';
+      if (pathname.startsWith('/admin')) pathRole = 'admin';
+      else if (pathname.startsWith('/dental-doctor')) pathRole = 'dental doctor';
+      else if (pathname.startsWith('/dentist-junior')) pathRole = 'dentist junior';
+      else if (pathname.startsWith('/dental-assistant')) pathRole = 'dental assistant';
+      else if (pathname.startsWith('/doctor')) pathRole = 'doctor';
+      else if (pathname.startsWith('/executive')) pathRole = 'executive';
+      else if (pathname.startsWith('/reception')) pathRole = 'reception';
+      else if (pathname.startsWith('/telecaller')) pathRole = 'telecaller';
+      else if (pathname.startsWith('/op-technician')) pathRole = 'op technician';
+      else if (pathname.startsWith('/sop-technician')) pathRole = 'sop technician';
+
+      if (pathRole) {
+        const hasAccess = userRoles.includes(pathRole) || userRoles.includes('superadmin') || (pathRole === 'admin' && userRoles.includes('co-admin'));
+        if (!hasAccess) {
+          logout(getLoginPath(activeRole));
+        } else {
+          const activePrefix = getRolePrefix(activeRole);
+          if (activePrefix && !pathname.startsWith(activePrefix)) {
+            router.push(`${activePrefix}/dashboard`);
+          }
+        }
       }
     }
-  }, [user, router, pathname]);
+  }, [user, activeRole, router, pathname, loading]);
 
   if (!user) {
     return (
@@ -303,8 +327,8 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
     );
   }
 
-  const prefix = getRolePrefix(user.role);
-  const dashboardHref = user.role === 'Superadmin' ? '/superadmin/dashboard' : `${prefix}/dashboard`;
+  const prefix = getRolePrefix(activeRole);
+  const dashboardHref = activeRole === 'Superadmin' ? '/superadmin/dashboard' : `${prefix}/dashboard`;
   const isTabActive = (href: string) => {
     if (href.endsWith('/settings')) {
       return pathname.endsWith('/settings');
@@ -314,7 +338,13 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
     }
     return pathname.startsWith(href);
   };
-  const allowedItems = SIDEBAR_ITEMS.filter(item => item.roles.includes(user.role)).map(item => {
+  const allowedItems = SIDEBAR_ITEMS.filter(item => {
+    const rolesToCheck = [...item.roles];
+    if (rolesToCheck.includes('Admin') && !rolesToCheck.includes('Co-admin')) {
+      rolesToCheck.push('Co-admin');
+    }
+    return rolesToCheck.includes(activeRole);
+  }).map(item => {
     let targetHref = item.href;
     if (item.href !== '/superadmin/dashboard' && item.href !== '/dashboard' && !item.href.startsWith(prefix)) {
       if (item.href === '/telecaller') {
@@ -435,16 +465,15 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
   return (
     <div className="flex h-screen overflow-hidden bg-secondary-bg text-slate-500 w-full max-w-full">
       {/* Sidebar for Desktop */}
-      <aside className="hidden md:flex md:w-64 md:flex-col md:shrink-0 bg-white border-r border-border-gray">
+      <aside 
+        style={{ width: `${sidebarWidth}px` }}
+        className={`hidden md:flex md:flex-col md:shrink-0 bg-white border-r border-border-gray relative ${
+          isResizing ? 'select-none' : ''
+        }`}
+      >
         {/* Brand */}
-        <div className="flex h-16 items-center px-6 border-b border-border-gray gap-2">
-          <div className="h-8 w-8 rounded-lg bg-primary-green flex items-center justify-center font-bold text-white text-lg">
-            V
-          </div>
-          <div className="flex flex-col">
-            <span className="font-bold text-sm leading-tight text-primary-green">VENKATESWARA</span>
-            <span className="text-[10px] text-primary-green font-semibold tracking-wider">VASCULAR FOUNDATION</span>
-          </div>
+        <div className="flex h-16 items-center px-5 border-b border-border-gray">
+          <img src="/logo.png" alt="Pranavayu Logo" className="h-12 w-auto object-contain object-left" />
         </div>
 
         {/* Navigation */}
@@ -509,6 +538,15 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
             Logout
           </button>
         </div>
+
+        {/* Resize Handle */}
+        <div 
+          onMouseDown={startResizing}
+          className={`absolute top-0 right-0 bottom-0 w-1.5 cursor-col-resize select-none z-50 hover:bg-primary-green/20 active:bg-primary-green/40 transition-colors duration-150 ${
+            isResizing ? 'bg-primary-green/30' : 'bg-transparent'
+          }`}
+          title="Drag to resize sidebar"
+        />
       </aside>
 
       {/* Mobile Drawer Sidebar */}
@@ -530,15 +568,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
               className="fixed top-0 bottom-0 left-0 z-50 w-[min(288px,85vw)] bg-white border-r border-border-gray flex flex-col md:hidden"
             >
               <div className="flex h-16 items-center justify-between px-6 border-b border-border-gray">
-                <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-lg bg-primary-green flex items-center justify-center font-bold text-white text-lg">
-                    V
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="font-bold text-sm leading-tight text-primary-green">VENKATESWARA</span>
-                    <span className="text-[10px] text-primary-green font-semibold tracking-wider">VASCULAR FOUNDATION</span>
-                  </div>
-                </div>
+                <img src="/logo.png" alt="Pranavayu Logo" className="h-12 object-contain" />
                 <button id="close-mobile-menu" onClick={() => setSidebarOpen(false)} className="text-slate-500 hover:text-primary-green">
                   <X className="h-5 w-5" />
                 </button>
@@ -591,14 +621,29 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold text-slate-500 truncate">{user.name}</p>
-                    <p className="text-[10px] text-primary-green font-bold uppercase">{user.role}</p>
+                    {(user.role || '').includes(',') ? (
+                      <SelectField
+                        value={activeRole}
+                        onChange={(nextRole) => {
+                          setActiveRole(nextRole);
+                          const nextPrefix = getRolePrefix(nextRole);
+                          router.push(`${nextPrefix}/dashboard`);
+                          setSidebarOpen(false);
+                        }}
+                        options={(user.role || '').split(',').map((r: string) => ({ value: r.trim(), label: r.trim() }))}
+                        className="w-full mt-1.5"
+                        triggerClassName="py-1.5 px-3 text-xs"
+                      />
+                    ) : (
+                      <p className="text-[10px] text-primary-green font-bold uppercase">{activeRole}</p>
+                    )}
                   </div>
                 </div>
-                <button 
-                  id="mobile-logout-btn"
-                  onClick={() => logout(getLoginPath(user.role))} 
-                  className="flex w-full items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-alert-text bg-alert-bg hover:bg-[#fee2e2] border border-alert-border rounded-lg"
-                >
+                  <button 
+                    id="mobile-logout-btn"
+                    onClick={() => logout(getLoginPath(activeRole))} 
+                    className="flex w-full items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-alert-text bg-alert-bg hover:bg-[#fee2e2] border border-alert-border rounded-lg"
+                  >
                   <LogOut className="h-3.5 w-3.5" />
                   Logout
                 </button>
@@ -621,11 +666,11 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
               <Menu className="h-6 w-6" />
             </button>
             
-            {/* Clock & Punch status */}
+            {/* Login Time & Punch status */}
             <div className="hidden sm:flex items-center gap-3 bg-secondary-bg px-4 py-1.5 rounded-full border border-border-gray text-secondary-text">
               <div className="flex items-center gap-1.5 text-xs text-secondary-text font-medium">
-                <Clock className="h-3.5 w-3.5 text-primary-green animate-pulse" />
-                <span>{currentTime}</span>
+                <Clock className="h-3.5 w-3.5 text-primary-green" />
+                <span>Logged in at {loginTime}</span>
               </div>
               <div className="h-3.5 w-px bg-border-gray" />
               {(isPunchedIn && activePunchRecord) || (user && user.role !== 'Executive') ? (
@@ -646,13 +691,24 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
           {/* Right actions */}
           <div className="flex items-center gap-1.5 sm:gap-3 relative shrink-0 min-w-0">
             {/* User details (Tablet & Desktop) */}
-            <button 
-              onClick={handleToggleProfile}
-              className="hidden lg:flex flex-col text-right min-w-0 max-w-[150px] justify-center transition-all duration-200 hover:opacity-80 cursor-pointer border-0 bg-transparent p-0"
-            >
+            <div className="hidden lg:flex flex-col text-right min-w-0 max-w-[180px] justify-center items-end">
               <span className="text-xs font-semibold text-[#059669] truncate">{user.name}</span>
-              <span className="text-[10px] font-bold text-[#059669] uppercase tracking-wide truncate">{user.role}</span>
-            </button>
+              {(user.role || '').includes(',') ? (
+                <SelectField
+                  value={activeRole}
+                  onChange={(nextRole) => {
+                    setActiveRole(nextRole);
+                    const nextPrefix = getRolePrefix(nextRole);
+                    router.push(`${nextPrefix}/dashboard`);
+                  }}
+                  options={(user.role || '').split(',').map((r: string) => ({ value: r.trim(), label: r.trim() }))}
+                  className="w-36 mt-1.5"
+                  triggerClassName="py-1.5 px-3 text-xs"
+                />
+              ) : (
+                <span className="text-[10px] font-bold text-[#059669] uppercase tracking-wide truncate">{activeRole}</span>
+              )}
+            </div>
 
 
             {/* Notifications Bell */}
@@ -816,7 +872,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
               </span>
               {activePunchRecord && (
                 <span className="text-[9px] text-slate-500">
-                  ({new Date(activePunchRecord.punch_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
+                  ({new Date(activePunchRecord.punch_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })})
                 </span>
               )}
             </div>

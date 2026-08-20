@@ -85,7 +85,10 @@ export default function AdminFieldAppointments() {
       const execMap = new Map<number, string>();
       data.forEach((item: any) => {
         if (item.executive_id && item.executive_name) {
-          execMap.set(item.executive_id, item.executive_name);
+          const parsedId = Number(item.executive_id);
+          if (!isNaN(parsedId)) {
+            execMap.set(parsedId, item.executive_name);
+          }
         }
       });
       const uniqueExecs: { id: number; name: string }[] = [];
@@ -318,7 +321,7 @@ export default function AdminFieldAppointments() {
       day: '2-digit',
       month: 'short',
       year: 'numeric'
-    }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }) + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
   };
 
   const openStatusModal = (lead: any) => {
@@ -649,6 +652,7 @@ export default function AdminFieldAppointments() {
                     <th className="px-4 py-4">Follow-ups</th>
                     <th className="px-4 py-4">Executive Name</th>
                     <th className="px-4 py-4">Submission Time</th>
+                    <th className="px-4 py-4">Submission Location</th>
                     <th className="px-4 py-4">Status</th>
                     <th className="px-5 py-4 text-center">Action</th>
                   </tr>
@@ -751,6 +755,20 @@ export default function AdminFieldAppointments() {
                         </td>
                         <td className="px-4 py-4 text-slate-400 whitespace-nowrap">
                           {formatDate(item.created_at)}
+                        </td>
+                        <td className="px-4 py-4 text-slate-500 max-w-[200px] truncate" title={item.added_location_address || 'Not Available'}>
+                          {item.added_latitude && item.added_longitude ? (
+                            <a
+                              href={`https://www.google.com/maps/search/?api=1&query=${item.added_latitude},${item.added_longitude}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="hover:text-primary-green hover:underline font-bold transition-colors cursor-pointer"
+                            >
+                              {item.added_location_address || 'View Location'}
+                            </a>
+                          ) : (
+                            item.added_location_address || 'Not Available'
+                          )}
                         </td>
                         <td className="px-4 py-4 whitespace-nowrap">
                           <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${getStatusColor(item.lead_status || item.status || 'New Lead')}`}>

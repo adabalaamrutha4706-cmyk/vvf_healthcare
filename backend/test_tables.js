@@ -1,23 +1,18 @@
 const { Client } = require('pg');
+require('dotenv').config();
 
-const projectRef = 'skbikcqrqyoxezflxshx';
-const password = 'Venkateswara_healthcare';
-const host = 'aws-1-ap-south-1.pooler.supabase.com';
+const dbUrl = process.env.DATABASE_URL || 'postgresql://postgres:lms_password@localhost:5432/vvf_healthcare';
 
 async function listTables() {
   const client = new Client({
-    host,
-    port: 5432,
-    user: `postgres.${projectRef}`,
-    password: password,
-    database: 'postgres',
-    ssl: { rejectUnauthorized: false },
+    connectionString: dbUrl,
+    ssl: dbUrl.includes('localhost') || dbUrl.includes('127.0.0.1') ? undefined : { rejectUnauthorized: false },
     connectionTimeoutMillis: 5000
   });
 
   try {
     await client.connect();
-    console.log('Connected to Supabase!');
+    console.log('Connected to database!');
     const res = await client.query(`
       SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public';
     `);

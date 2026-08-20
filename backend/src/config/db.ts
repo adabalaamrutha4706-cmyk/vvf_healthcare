@@ -2,8 +2,8 @@ import { Pool, QueryResultRow } from 'pg';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// Load env
-import dotenv from 'dotenv';
+// @ts-ignore
+import * as dotenv from 'dotenv';
 dotenv.config();
 
 const useLocalDb = process.env.USE_LOCAL_DB === 'true';
@@ -92,10 +92,31 @@ class LocalDatabase {
     }
   }
 
+  private preprocessSql(sql: string): string {
+    let s = sql.trim().replace(/\s+/g, ' ');
+    // Remove JOIN clauses: JOIN table ON condition, LEFT JOIN table ON condition
+    s = s.replace(/(?:left\s+)?join\s+\w+\s+(?:as\s+)?\w+\s+on\s+.*?(?=\s+where|\s+order\s+by|\s+limit|$)/gi, '');
+    s = s.replace(/(?:left\s+)?join\s+\w+\s+on\s+.*?(?=\s+where|\s+order\s+by|\s+limit|$)/gi, '');
+    // Remove table aliases in FROM: "FROM table alias" -> "FROM table"
+    s = s.replace(/from\s+(\w+)\s+(?:as\s+)?(?!\bwhere\b|\border\b|\blimit\b)\w+/gi, 'from $1');
+    // Remove table aliases in WHERE clause: "alias.column" -> "column"
+    s = s.replace(/\b\w+\.(\w+)\b/g, '$1');
+    return s;
+  }
+
   public query(sql: string, params: any[] = []): { rows: any[] } {
     this.read(); // Refresh from file
     sql = sql.trim().replace(/\s+/g, ' ');
 
+    // Handle nested COUNT query: SELECT COUNT(*)::int as count FROM (INNER) as temp
+    const countMatch = sql.match(/^select\s+count\(\*\)(?:::\w+)?\s+as\s+count\s+from\s*\((.*)\)\s*as\s+\w+$/i);
+    if (countMatch) {
+      const innerSql = countMatch[1].trim();
+      const innerResult = this.query(innerSql, params);
+      return { rows: [{ count: innerResult.rows.length }] };
+    }
+
+    sql = this.preprocessSql(sql);
     const lowerSql = sql.toLowerCase();
     
     // 1. INSERT INTO
@@ -198,13 +219,29 @@ class LocalDatabase {
 
     // 3. SELECT
     if (lowerSql.startsWith('select')) {
-      const match = sql.match(/select\s+(.*?)\s+from\s+(\w+)(?:\s+where\s+(.*?))?(?:\s+order\s+by\s+(.*?))?(?:\s+limit\s+(\d+))?$/i);
-      if (match) {
-        const fields = match[1];
-        const table = match[2].toLowerCase();
-        const whereClause = match[3] || '';
-        const orderByClause = match[4] || '';
-        const limitVal = match[5];
+      // Find outer FROM with parenthesis depth tracking to support subqueries in columns
+      let depth = 0;
+      let fromIdx = -1;
+      for (let i = 0; i < sql.length; i++) {
+        if (sql[i] === '(') depth++;
+        else if (sql[i] === ')') depth--;
+        else if (depth === 0 && lowerSql.substring(i, i + 5) === 'from ') {
+          if (i === 0 || /\s/.test(sql[i - 1])) {
+            fromIdx = i;
+            break;
+          }
+        }
+      }
+
+      if (fromIdx !== -1) {
+        const fields = sql.substring(0, fromIdx).trim();
+        const rest = sql.substring(fromIdx + 5).trim();
+        const match = rest.match(/^(\w+)(?:\s+where\s+(.*?))?(?:\s+order\s+by\s+(.*?))?(?:\s+limit\s+(\d+))?$/i);
+        if (match) {
+          const table = match[1].toLowerCase();
+          const whereClause = match[2] || '';
+          const orderByClause = match[3] || '';
+          const limitVal = match[4];
 
         let rows = [...(this.data[table] || [])];
 
@@ -235,6 +272,7 @@ class LocalDatabase {
         }
 
         return { rows };
+        }
       }
     }
 

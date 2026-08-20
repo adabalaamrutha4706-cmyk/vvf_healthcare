@@ -3,6 +3,7 @@ import { query } from '../config/db';
 import { logAudit } from '../config/audit';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { assignSingleLeadToTelecaller, rebalanceLeadsAcrossTelecallers } from '../utils/leadAssignmentHelper';
+import { reverseGeocode } from '../utils/geocoder';
 
 const createNotification = async (title: string, message: string, userId: number | null) => {
   try {
@@ -35,7 +36,11 @@ export const createFieldAppointment = async (req: AuthenticatedRequest, res: Res
       gender,
       phone_number,
       appointment_type,
-      medical_history
+      medical_history,
+      latitude,
+      longitude,
+      added_latitude,
+      added_longitude
     } = req.body;
 
     // Validate inputs
@@ -100,12 +105,22 @@ export const createFieldAppointment = async (req: AuthenticatedRequest, res: Res
     const randomNum = Math.floor(100000 + Math.random() * 900000);
     const patientLeadId = `PL-${randomNum}`;
 
+    // Resolve location tracking coordinates
+    const latVal = added_latitude !== undefined && added_latitude !== null && added_latitude !== '' ? parseFloat(added_latitude) : (latitude !== undefined && latitude !== null && latitude !== '' ? parseFloat(latitude) : null);
+    const lngVal = added_longitude !== undefined && added_longitude !== null && added_longitude !== '' ? parseFloat(added_longitude) : (longitude !== undefined && longitude !== null && longitude !== '' ? parseFloat(longitude) : null);
+
+    let resolvedAddress = null;
+    if (latVal !== null && lngVal !== null && !isNaN(latVal) && !isNaN(lngVal)) {
+      resolvedAddress = await reverseGeocode(latVal, lngVal);
+    }
+
     // Insert record
     const result = await query(
       `INSERT INTO field_appointments (
         patient_lead_id, full_name, age, gender, phone_number,
-        appointment_type, medical_history, executive_id, executive_name, status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'New Lead') RETURNING *`,
+        appointment_type, medical_history, executive_id, executive_name, status,
+        added_latitude, added_longitude, added_location_address
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'New Lead', $10, $11, $12) RETURNING *`,
       [
         patientLeadId,
         full_name.trim(),
@@ -115,7 +130,10 @@ export const createFieldAppointment = async (req: AuthenticatedRequest, res: Res
         appointment_type,
         medical_history || '',
         executiveId,
-        executiveName
+        executiveName,
+        latVal,
+        lngVal,
+        resolvedAddress
       ]
     );
 

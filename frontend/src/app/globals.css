@@ -4,6 +4,10 @@
   --background: #f8fafc;
   --foreground: #0f172a;
 
+  /* Modern typography font fallbacks (Inter, System UI stack) */
+  --font-geist-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-geist-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
   --very-light-green: #ecfdf5;
   --light-green: #a7f3d0;
   --secondary-bg: #f8fafc;

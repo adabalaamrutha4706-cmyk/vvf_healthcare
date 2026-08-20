@@ -52,8 +52,8 @@ export const getAppointments = async (req: AuthenticatedRequest, res: Response) 
       queryParts.push(`AND a.appointment_type = 'doctor'`);
       queryParts.push(`AND a.doctor_id = $${paramIdx++}`);
       params.push(userId);
-    } else if (userRole === 'Dental Doctor') {
-      // Dental Doctors can only see dental-type appointments assigned to them
+    } else if (userRole === 'Dental Doctor' || userRole === 'Dentist Junior' || userRole === 'Dental Assistant') {
+      // Dental Doctors, Juniors, and Assistants can see dental-type appointments assigned to them
       queryParts.push(`AND a.appointment_type = 'dental'`);
       queryParts.push(`AND a.doctor_id = $${paramIdx++}`);
       params.push(userId);
@@ -75,7 +75,7 @@ export const getAppointments = async (req: AuthenticatedRequest, res: Response) 
 
     if (appointment_type && appointment_type !== 'All' && appointment_type !== '') {
       // Only apply type filter if not already scoped by role
-      if (userRole !== 'Doctor' && userRole !== 'Dental Doctor' && userRole !== 'OP Technician' && userRole !== 'SOP Technician') {
+      if (userRole !== 'Doctor' && userRole !== 'Dental Doctor' && userRole !== 'Dentist Junior' && userRole !== 'Dental Assistant' && userRole !== 'OP Technician' && userRole !== 'SOP Technician') {
         queryParts.push(`AND a.appointment_type = $${paramIdx++}`);
         params.push(appointment_type as string);
       }
@@ -130,6 +130,8 @@ export const getAppointments = async (req: AuthenticatedRequest, res: Response) 
           WHEN c.role = 'Executive' THEN 'Executive Regional Executive'
           WHEN c.role = 'Doctor' THEN 'Doctor General Doctor'
           WHEN c.role = 'Dental Doctor' THEN 'Dental Doctor Dentist'
+          WHEN c.role = 'Dentist Junior' THEN 'Dentist Junior Dentist'
+          WHEN c.role = 'Dental Assistant' THEN 'Dental Assistant'
           WHEN c.role = 'OP Technician' THEN 'OP Technician'
           WHEN c.role = 'SOP Technician' THEN 'SOP Technician'
           ELSE c.role
@@ -206,7 +208,7 @@ export const getAppointmentById = async (req: AuthenticatedRequest, res: Respons
     }
 
     // Enforce Dental Doctor view constraints: can only see their own dental-type appointments
-    if (userRole === 'Dental Doctor' && (app.appointment_type !== 'dental' || app.doctor_id !== userId)) {
+    if ((userRole === 'Dental Doctor' || userRole === 'Dentist Junior' || userRole === 'Dental Assistant') && (app.appointment_type !== 'dental' || app.doctor_id !== userId)) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. You can only view your own dental appointments.',
@@ -225,7 +227,7 @@ export const getAppointmentById = async (req: AuthenticatedRequest, res: Respons
     }
 
     // Revenue Privacy Masking
-    const hideRevenue = !['Admin', 'Superadmin', 'Doctor', 'Dental Doctor', 'Reception'].includes(userRole || '');
+    const hideRevenue = !['Admin', 'Superadmin', 'Doctor', 'Dental Doctor', 'Dentist Junior', 'Dental Assistant', 'Reception'].includes(userRole || '');
     const processedApp = {
       ...app,
       total_amount: hideRevenue ? 0.00 : parseFloat(app.total_amount),
@@ -275,7 +277,18 @@ export const createAppointment = async (req: AuthenticatedRequest, res: Response
       number_of_sessions,
       session_duration,
       package_type,
-      service_remarks
+      service_remarks,
+      // New Fields
+      co_relation,
+      date_of_birth,
+      blood_group,
+      city,
+      address,
+      diagnosis,
+      reference,
+      consultation_charges,
+      tests_charges,
+      medicine_charges
     } = req.body;
 
     const type = appointment_type || 'doctor';
@@ -361,7 +374,35 @@ export const createAppointment = async (req: AuthenticatedRequest, res: Response
       }
     }
 
-    const price = parseFloat(total_amount || 0);
+    let finalPatientId = patient_id ? String(patient_id).trim() : '';
+    if (!finalPatientId) {
+      const existingPatient = await query(
+        `SELECT patient_id FROM appointments 
+         WHERE LOWER(patient_name) = LOWER($1) AND contact_number = $2 AND patient_id IS NOT NULL AND is_deleted = false
+         ORDER BY created_at DESC LIMIT 1`,
+        [patient_name.trim(), contact_number.trim()]
+      );
+      if (existingPatient.rows.length > 0 && existingPatient.rows[0].patient_id) {
+        finalPatientId = existingPatient.rows[0].patient_id;
+      } else {
+        let uniqueFound = false;
+        while (!uniqueFound) {
+          const randNum = Math.floor(10000 + Math.random() * 90000);
+          const potentialId = `PT-${randNum}`;
+          const checkId = await query('SELECT id FROM appointments WHERE patient_id = $1 LIMIT 1', [potentialId]);
+          if (checkId.rows.length === 0) {
+            finalPatientId = potentialId;
+            uniqueFound = true;
+          }
+        }
+      }
+    }
+
+    const consultation = consultation_charges ? parseFloat(consultation_charges) : 0.00;
+    const testsVal = tests_charges ? parseFloat(tests_charges) : 0.00;
+    const medicine = medicine_charges ? parseFloat(medicine_charges) : 0.00;
+    const totalCharges = consultation + testsVal + medicine;
+    const price = totalCharges > 0 ? totalCharges : parseFloat(total_amount || 0);
     const appStatus = status || 'Scheduled';
 
     const result = await query(
@@ -371,8 +412,10 @@ export const createAppointment = async (req: AuthenticatedRequest, res: Response
         created_by_user_id, created_by_name, created_by_role,
         appointment_type, status, patient_id, service_name, department, visit_type,
         chief_complaint, dental_concern, treatment_type, technician_id,
-        number_of_sessions, session_duration, package_type, service_remarks
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, 'Unpaid', $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27) RETURNING *`,
+        number_of_sessions, session_duration, package_type, service_remarks,
+        co_relation, date_of_birth, blood_group, city, address, diagnosis, reference,
+        consultation_charges, tests_charges, medicine_charges
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, 'Unpaid', $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37) RETURNING *`,
       [
         patient_name, // $1
         parseInt(age, 10), // $2
@@ -389,7 +432,7 @@ export const createAppointment = async (req: AuthenticatedRequest, res: Response
         req.user?.role || 'Not Available', // $13 (created_by_role)
         type, // $14
         appStatus, // $15
-        patient_id || null, // $16
+        finalPatientId || null, // $16
         type === 'services' ? service_name : null, // $17
         type === 'doctor' ? department : null, // $18
         type === 'doctor' ? visit_type : null, // $19
@@ -400,7 +443,17 @@ export const createAppointment = async (req: AuthenticatedRequest, res: Response
         type === 'services' && number_of_sessions ? parseInt(number_of_sessions, 10) : null, // $24
         type === 'services' && session_duration ? parseInt(session_duration, 10) : null, // $25
         type === 'services' ? package_type : null, // $26
-        type === 'services' ? service_remarks : null // $27
+        type === 'services' ? service_remarks : null, // $27
+        co_relation || null, // $28
+        date_of_birth || null, // $29
+        blood_group || null, // $30
+        city || null, // $31
+        address || null, // $32
+        diagnosis || null, // $33
+        reference || null, // $34
+        consultation, // $35
+        testsVal, // $36
+        medicine // $37
       ]
     );
 
@@ -505,7 +558,7 @@ export const updateAppointment = async (req: AuthenticatedRequest, res: Response
       }
     }
 
-    if (userRole === 'Dental Doctor') {
+    if (userRole === 'Dental Doctor' || userRole === 'Dentist Junior' || userRole === 'Dental Assistant') {
       if (appointment.appointment_type !== 'dental' || appointment.doctor_id !== userId) {
         return res.status(403).json({
           success: false,
@@ -516,7 +569,7 @@ export const updateAppointment = async (req: AuthenticatedRequest, res: Response
       if (hoursElapsed > 24) {
         return res.status(403).json({
           success: false,
-          message: `Edit lock active. Dental Doctors can only edit appointments within 24 hours of creation. (Elapsed: ${hoursElapsed.toFixed(1)}h)`,
+          message: `Edit lock active. Dental staff can only edit appointments within 24 hours of creation. (Elapsed: ${hoursElapsed.toFixed(1)}h)`,
           errorCode: 'EDIT_LOCKED'
         });
       }
@@ -558,7 +611,18 @@ export const updateAppointment = async (req: AuthenticatedRequest, res: Response
       number_of_sessions,
       session_duration,
       package_type,
-      service_remarks
+      service_remarks,
+      // New Fields
+      co_relation,
+      date_of_birth,
+      blood_group,
+      city,
+      address,
+      diagnosis,
+      reference,
+      consultation_charges,
+      tests_charges,
+      medicine_charges
     } = req.body;
 
     // Validate fields if provided in request body
@@ -622,8 +686,15 @@ export const updateAppointment = async (req: AuthenticatedRequest, res: Response
     const newHospitalId = hospital_id !== undefined ? parseInt(hospital_id, 10) : appointment.hospital_id;
     const newAppointmentDate = appointment_date !== undefined ? appointment_date : appointment.appointment_date;
     const newNotes = notes !== undefined ? notes : appointment.notes;
-    const newTotalAmount = total_amount !== undefined ? parseFloat(total_amount) : parseFloat(appointment.total_amount);
-    
+
+    // Calculated total amount
+    const newConsultationCharges = consultation_charges !== undefined ? parseFloat(consultation_charges || 0) : parseFloat(appointment.consultation_charges || 0);
+    const newTestsCharges = tests_charges !== undefined ? parseFloat(tests_charges || 0) : parseFloat(appointment.tests_charges || 0);
+    const newMedicineCharges = medicine_charges !== undefined ? parseFloat(medicine_charges || 0) : parseFloat(appointment.medicine_charges || 0);
+
+    const totalCharges = newConsultationCharges + newTestsCharges + newMedicineCharges;
+    const newTotalAmount = totalCharges > 0 ? totalCharges : (total_amount !== undefined ? parseFloat(total_amount) : parseFloat(appointment.total_amount));
+
     // Restructured fields fallback
     const newAppointmentType = appointment_type !== undefined ? appointment_type : appointment.appointment_type;
     const newStatus = status !== undefined ? status : appointment.status;
@@ -654,6 +725,15 @@ export const updateAppointment = async (req: AuthenticatedRequest, res: Response
     const newPackageType = package_type !== undefined ? package_type : appointment.package_type;
     const newServiceRemarks = service_remarks !== undefined ? service_remarks : appointment.service_remarks;
 
+    // New fields fallback
+    const newCoRelation = co_relation !== undefined ? co_relation : appointment.co_relation;
+    const newDob = date_of_birth !== undefined ? date_of_birth : appointment.date_of_birth;
+    const newBloodGroup = blood_group !== undefined ? blood_group : appointment.blood_group;
+    const newCity = city !== undefined ? city : appointment.city;
+    const newAddress = address !== undefined ? address : appointment.address;
+    const newDiagnosis = diagnosis !== undefined ? diagnosis : appointment.diagnosis;
+    const newReference = reference !== undefined ? reference : appointment.reference;
+
     // Paid amount calculation
     let newPaidAmount = paid_amount !== undefined ? parseFloat(paid_amount) : parseFloat(appointment.paid_amount);
     let newPaymentStatus = payment_status !== undefined ? payment_status : appointment.payment_status;
@@ -668,7 +748,7 @@ export const updateAppointment = async (req: AuthenticatedRequest, res: Response
     }
 
     // Fetch doctor and hospital details for change summary
-    const doctorsRes = await query("SELECT id, name FROM users WHERE role IN ('Doctor', 'Dental Doctor')");
+    const doctorsRes = await query("SELECT id, name FROM users WHERE role IN ('Doctor', 'Dental Doctor', 'Dentist Junior', 'Dental Assistant')");
     const hospitalsRes = await query("SELECT id, name FROM hospitals");
     const getDoctorName = (docId: any) => {
       const doc = doctorsRes.rows.find((d: any) => String(d.id) === String(docId));
@@ -722,6 +802,16 @@ export const updateAppointment = async (req: AuthenticatedRequest, res: Response
     checkDiff('session_duration', appointment.session_duration, newSessionDuration, 'Session duration');
     checkDiff('package_type', appointment.package_type, newPackageType, 'Package type');
     checkDiff('service_remarks', appointment.service_remarks, newServiceRemarks, 'Service remarks');
+    checkDiff('co_relation', appointment.co_relation, newCoRelation, 'Relation (C%)');
+    checkDiff('date_of_birth', appointment.date_of_birth, newDob, 'Date of birth');
+    checkDiff('blood_group', appointment.blood_group, newBloodGroup, 'Blood group');
+    checkDiff('city', appointment.city, newCity, 'City');
+    checkDiff('address', appointment.address, newAddress, 'Address');
+    checkDiff('diagnosis', appointment.diagnosis, newDiagnosis, 'Diagnosis');
+    checkDiff('reference', appointment.reference, newReference, 'Reference');
+    checkDiff('consultation_charges', parseFloat(appointment.consultation_charges || 0), newConsultationCharges, 'Consultation charges');
+    checkDiff('tests_charges', parseFloat(appointment.tests_charges || 0), newTestsCharges, 'Tests charges');
+    checkDiff('medicine_charges', parseFloat(appointment.medicine_charges || 0), newMedicineCharges, 'Medicine charges');
 
     const result = await query(
       `UPDATE appointments SET
@@ -732,35 +822,48 @@ export const updateAppointment = async (req: AuthenticatedRequest, res: Response
         service_name = $15, department = $16, visit_type = $17,
         chief_complaint = $18, dental_concern = $19, treatment_type = $20,
         technician_id = $21, number_of_sessions = $22, session_duration = $23,
-        package_type = $24, service_remarks = $25
-       WHERE id = $26 RETURNING *`,
+        package_type = $24, service_remarks = $25,
+        co_relation = $26, date_of_birth = $27, blood_group = $28, city = $29,
+        address = $30, diagnosis = $31, reference = $32,
+        consultation_charges = $33, tests_charges = $34, medicine_charges = $35
+       WHERE id = $36 RETURNING *`,
       [
-        newPatientName,
-        newAge,
-        newGender,
-        newContactNumber,
-        newHospitalId,
-        newDoctorId,
-        newAppointmentDate,
-        newNotes,
-        newTotalAmount,
-        newPaidAmount,
-        newPaymentStatus,
-        newAppointmentType,
-        newStatus,
-        newPatientId,
-        newServiceName,
-        newDepartment,
-        newVisitType,
-        newChiefComplaint,
-        newDentalConcern,
-        newTreatmentType,
-        newTechnicianId,
-        newNumberOfSessions,
-        newSessionDuration,
-        newPackageType,
-        newServiceRemarks,
-        id
+        newPatientName, // $1
+        newAge, // $2
+        newGender, // $3
+        newContactNumber, // $4
+        newHospitalId, // $5
+        newDoctorId, // $6
+        newAppointmentDate, // $7
+        newNotes, // $8
+        newTotalAmount, // $9
+        newPaidAmount, // $10
+        newPaymentStatus, // $11
+        newAppointmentType, // $12
+        newStatus, // $13
+        newPatientId, // $14
+        newServiceName, // $15
+        newDepartment, // $16
+        newVisitType, // $17
+        newChiefComplaint, // $18
+        newDentalConcern, // $19
+        newTreatmentType, // $20
+        newTechnicianId, // $21
+        newNumberOfSessions, // $22
+        newSessionDuration, // $23
+        newPackageType, // $24
+        newServiceRemarks, // $25
+        newCoRelation || null, // $26
+        newDob || null, // $27
+        newBloodGroup || null, // $28
+        newCity || null, // $29
+        newAddress || null, // $30
+        newDiagnosis || null, // $31
+        newReference || null, // $32
+        newConsultationCharges, // $33
+        newTestsCharges, // $34
+        newMedicineCharges, // $35
+        id // $36
       ]
     );
 
@@ -1030,7 +1133,7 @@ export const getPendingPayments = async (req: AuthenticatedRequest, res: Respons
     let paramIndex = 1;
 
     // Doctor/Dental Doctor restriction (can only see their own appointments)
-    if (userRole === 'Doctor' || userRole === 'Dental Doctor') {
+    if (userRole === 'Doctor' || userRole === 'Dental Doctor' || userRole === 'Dentist Junior' || userRole === 'Dental Assistant') {
       queryParts.push(`AND a.doctor_id = $${paramIndex++}`);
       params.push(userId);
     } else if (doctor_id) {
@@ -1125,7 +1228,7 @@ export const getPendingPayments = async (req: AuthenticatedRequest, res: Respons
     // Count query before limits
     const countQuery = `SELECT COUNT(*)::int as count FROM (${queryParts.join(' ')}) as temp`;
     const countResult = await query(countQuery, params);
-    const totalCount = countResult.rows[0].count;
+    const totalCount = countResult.rows && countResult.rows.length > 0 ? countResult.rows[0].count : 0;
 
     // Append ordering and pagination to the main query
     queryParts.push(orderClause);
@@ -1345,5 +1448,57 @@ export const moveAppointmentToTelecalling = async (req: AuthenticatedRequest, re
       message: err.message || 'Internal server error.',
       errorCode: 'INTERNAL_ERROR'
     });
+  }
+};
+
+export const lookupPatient = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { name, phone, patient_id } = req.query;
+
+    let result;
+    if (patient_id) {
+      result = await query(
+        `SELECT patient_name as name, age, gender, contact_number as phone, patient_id
+         FROM appointments
+         WHERE LOWER(patient_id) = LOWER($1) AND is_deleted = false
+         ORDER BY created_at DESC LIMIT 1`,
+        [String(patient_id).trim()]
+      );
+    } else if (name && phone) {
+      result = await query(
+        `SELECT patient_name as name, age, gender, contact_number as phone, patient_id
+         FROM appointments
+         WHERE LOWER(patient_name) = LOWER($1) AND contact_number = $2 AND is_deleted = false
+         ORDER BY created_at DESC LIMIT 1`,
+        [String(name).trim(), String(phone).trim()]
+      );
+    } else if (phone) {
+      result = await query(
+        `SELECT patient_name as name, age, gender, contact_number as phone, patient_id
+         FROM appointments
+         WHERE contact_number = $1 AND is_deleted = false
+         ORDER BY created_at DESC LIMIT 1`,
+        [String(phone).trim()]
+      );
+    } else if (name) {
+      result = await query(
+        `SELECT patient_name as name, age, gender, contact_number as phone, patient_id
+         FROM appointments
+         WHERE LOWER(patient_name) = LOWER($1) AND is_deleted = false
+         ORDER BY created_at DESC LIMIT 1`,
+        [String(name).trim()]
+      );
+    } else {
+      return res.status(400).json({ success: false, message: 'Missing search query parameters.' });
+    }
+
+    if (result.rows.length > 0) {
+      return res.json({ success: true, patient: result.rows[0] });
+    } else {
+      return res.json({ success: true, patient: null });
+    }
+  } catch (err: any) {
+    console.error('Lookup patient error:', err);
+    return res.status(500).json({ success: false, message: 'Internal server error.' });
   }
 };

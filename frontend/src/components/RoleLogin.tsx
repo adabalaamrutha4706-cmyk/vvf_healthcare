@@ -6,12 +6,12 @@ import { useAuth } from '../context/AuthContext';
 import { Activity, ShieldAlert, KeyRound, Mail, Sparkles } from 'lucide-react';
 
 interface RoleLoginProps {
-  targetRole: 'Admin' | 'Dental Doctor' | 'Doctor' | 'Executive' | 'Reception' | 'Telecaller' | 'OP Technician' | 'SOP Technician';
+  targetRole: 'Admin' | 'Dental Doctor' | 'Dentist Junior' | 'Dental Assistant' | 'Doctor' | 'Executive' | 'Reception' | 'Telecaller' | 'OP Technician' | 'SOP Technician';
   icon: React.ReactNode;
 }
 
 export default function RoleLogin({ targetRole, icon }: RoleLoginProps) {
-  const { login, user } = useAuth();
+  const { login, user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -20,18 +20,27 @@ export default function RoleLogin({ targetRole, icon }: RoleLoginProps) {
 
   const getDashboardPath = (role: string) => {
     const r = role.toLowerCase().trim();
-    if (r === 'dental doctor') return '/dental-doctor/dashboard';
-    return `/${r}/dashboard`;
+    if (r === 'admin' || r === 'superadmin' || r === 'co-admin') return '/admin/dashboard';
+    return `/${r.replace(/\s+/g, '-')}/dashboard`;
   };
 
   useEffect(() => {
+    if (authLoading) return;
     const token = localStorage.getItem('vvf_token');
     if (token && user) {
-      if (user.role === targetRole || (targetRole === 'Admin' && user.role === 'Superadmin')) {
-        router.replace(getDashboardPath(user.role));
+      const userRoles = (user.role || '').split(',').map((r: string) => r.trim().toLowerCase());
+      const lowerTargetRole = targetRole.toLowerCase();
+
+      let isAuthorized = userRoles.includes(lowerTargetRole);
+      if (!isAuthorized && lowerTargetRole === 'admin') {
+        isAuthorized = userRoles.includes('superadmin') || userRoles.includes('co-admin');
+      }
+
+      if (isAuthorized) {
+        router.replace(getDashboardPath(targetRole));
       }
     }
-  }, [user, router, targetRole]);
+  }, [user, router, targetRole, authLoading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,6 +63,10 @@ export default function RoleLogin({ targetRole, icon }: RoleLoginProps) {
         return { email: 'admin@vvf.org', pass: 'admin123', label: '💼 Admin Sandbox Log' };
       case 'Dental Doctor':
         return { email: 'dental@vvf.org', pass: 'dental123', label: '🦷 Dental Doctor Sandbox Log' };
+      case 'Dentist Junior':
+        return { email: 'dentistjr@vvf.org', pass: 'dentistjr123', label: '🦷 Dentist Junior Sandbox Log' };
+      case 'Dental Assistant':
+        return { email: 'dentalasst@vvf.org', pass: 'dentalasst123', label: '🦷 Dental Assistant Sandbox Log' };
       case 'Doctor':
         return { email: 'doctor@vvf.org', pass: 'doctor123', label: '🩺 Doctor Sandbox Log' };
       case 'Executive':
@@ -85,13 +98,8 @@ export default function RoleLogin({ targetRole, icon }: RoleLoginProps) {
         
         {/* Brand Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="h-14 w-14 rounded-2xl bg-primary-green flex items-center justify-center shadow-lg mb-3">
-            {icon}
-          </div>
-          <h1 className="text-xl font-bold text-slate-500 tracking-tight text-center leading-tight">
-            VENKATESWARA VASCULAR FOUNDATION
-          </h1>
-          <p className="text-xs text-primary-green font-bold uppercase tracking-wider mt-1">
+          <img src="/logo.png" alt="Pranavayu Logo" className="h-16 object-contain mb-2" />
+          <p className="text-xs text-primary-green font-bold uppercase tracking-wider">
             {targetRole} Clinical Portal
           </p>
         </div>
@@ -170,25 +178,7 @@ export default function RoleLogin({ targetRole, icon }: RoleLoginProps) {
           </button>
         </form>
 
-        {/* Sandbox Quick-Log */}
-        {demo && (
-          <div className="w-full mt-8 pt-6 border-t border-slate-100 flex flex-col items-center">
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-3 justify-center">
-              <Sparkles className="h-3.5 w-3.5 text-emerald-600 animate-pulse" />
-              <span>Developer Sandbox Quick-Fill Log</span>
-            </div>
-            <button
-              id={`fill-${targetRole.toLowerCase().replace(/\s+/g, '-')}`}
-              onClick={() => {
-                setEmail(demo.email);
-                setPassword(demo.pass);
-              }}
-              className="w-full py-2.5 px-4 bg-slate-55 hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-slate-800 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-            >
-              {demo.label}
-            </button>
-          </div>
-        )}
+
       </div>
     </div>
   );

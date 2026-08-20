@@ -182,3 +182,33 @@ export async function geocode(address: string, googleMapsLink?: string): Promise
     status: 'MANUAL_REVIEW_REQUIRED'
   };
 }
+
+export async function reverseGeocode(latitude: number, longitude: number): Promise<string> {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4000); // 4s timeout
+
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'VVF-Healthcare-App/1.0' },
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!res.ok) return `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+    const data = await res.json();
+    if (data && data.display_name) {
+      const addr = data.address || {};
+      const landmark = addr.amenity || addr.landmark || addr.shop || addr.tourism || addr.historic || addr.subway || addr.railway || addr.neighbourhood || '';
+      if (landmark) {
+        return `${landmark}, ${data.display_name}`;
+      }
+      return data.display_name;
+    }
+    return `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+  } catch (e) {
+    console.error('Nominatim reverse geocode error:', e);
+    return `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+  }
+}

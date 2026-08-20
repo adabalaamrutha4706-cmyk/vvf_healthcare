@@ -1,0 +1,10 @@
+node_modules
+dist
+.env
+data/local_db.json
+*.log
+.git
+.gitignore
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

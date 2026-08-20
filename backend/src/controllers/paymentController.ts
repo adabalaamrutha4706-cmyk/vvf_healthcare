@@ -307,7 +307,7 @@ export const getPaymentsReport = async (req: AuthenticatedRequest, res: Response
     let paramIdx = 1;
 
     // Doctor/Dental Doctor restriction (can only see their own appointments' payments)
-    if (userRole === 'Doctor' || userRole === 'Dental Doctor') {
+    if (userRole === 'Doctor' || userRole === 'Dental Doctor' || userRole === 'Dentist Junior' || userRole === 'Dental Assistant') {
       queryParts.push(`AND a.doctor_id = $${paramIdx++}`);
       params.push(userId);
     } else if (doctor_id && doctor_id !== 'All' && doctor_id !== 'undefined') {

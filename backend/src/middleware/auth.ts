@@ -9,7 +9,8 @@ export interface AuthenticatedRequest extends Request {
     id: number;
     name: string;
     email: string;
-    role: 'Admin' | 'Dental Doctor' | 'Doctor' | 'Reception' | 'Telecaller' | 'Executive' | 'Superadmin' | 'OP Technician' | 'SOP Technician';
+    role: 'Admin' | 'Dental Doctor' | 'Doctor' | 'Reception' | 'Telecaller' | 'Executive' | 'Superadmin' | 'OP Technician' | 'SOP Technician' | 'Dentist Junior' | 'Dental Assistant' | 'Co-admin';
+    assigned_therapy?: string | null;
   };
 }
 
@@ -32,7 +33,7 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
     
     // Check if user exists and is active
     const userResult = await query(
-      'SELECT id, name, email, role, is_active, is_deleted FROM users WHERE id = $1',
+      'SELECT id, name, email, role, is_active, is_deleted, assigned_therapy FROM users WHERE id = $1',
       [decoded.id]
     );
 
@@ -46,11 +47,21 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
       return res.status(403).json({ success: false, message: 'User account is deactivated or deleted.', errorCode: 'USER_INACTIVE' });
     }
 
+    const mappedRole = user.role
+      ? user.role.split(',')
+          .map((r: string) => {
+            const trimmed = r.trim();
+            return trimmed === 'Co-admin' ? 'Admin' : trimmed;
+          })
+          .join(', ')
+      : '';
+
     req.user = {
       id: user.id,
       name: user.name,
       email: user.email,
-      role: user.role as any
+      role: mappedRole as any,
+      assigned_therapy: user.assigned_therapy
     };
 
     next();
@@ -65,10 +76,14 @@ export const requireRole = (roles: string[]) => {
       return res.status(401).json({ success: false, message: 'Authentication required.', errorCode: 'AUTH_REQUIRED' });
     }
 
-    const normalizedUserRole = req.user.role.toLowerCase().replace(/\s+/g, '');
+    const userRoles = (req.user.role || '').split(',').map(r => r.trim().toLowerCase().replace(/\s+/g, ''));
+    if (userRoles.includes('superadmin')) {
+      return next();
+    }
+
     const hasRole = roles.some(role => {
       const normalizedRole = role.toLowerCase().replace(/\s+/g, '');
-      return normalizedUserRole === normalizedRole;
+      return userRoles.includes(normalizedRole);
     });
 
     if (!hasRole) {
@@ -84,7 +99,8 @@ export const requireSuperadmin = (req: AuthenticatedRequest, res: Response, next
     return res.status(401).json({ success: false, message: 'Authentication required.', errorCode: 'AUTH_REQUIRED' });
   }
 
-  if (req.user.role !== 'Superadmin') {
+  const userRoles = (req.user.role || '').split(',').map(r => r.trim().toLowerCase().replace(/\s+/g, ''));
+  if (!userRoles.includes('superadmin')) {
     return res.status(403).json({ success: false, message: 'Access denied. Superadmin privileges required.', errorCode: 'SUPERADMIN_REQUIRED' });
   }
 
@@ -97,14 +113,14 @@ export const authorize = (roles: string[]) => {
       return res.status(401).json({ success: false, message: 'Authentication required.', errorCode: 'AUTH_REQUIRED' });
     }
 
-    if (req.user.role === 'Superadmin') {
+    const userRoles = (req.user.role || '').split(',').map(r => r.trim().toLowerCase().replace(/\s+/g, ''));
+    if (userRoles.includes('superadmin')) {
       return next();
     }
 
-    const normalizedUserRole = req.user.role.toLowerCase().replace(/\s+/g, '');
     const hasRole = roles.some(role => {
       const normalizedRole = role.toLowerCase().replace(/\s+/g, '');
-      return normalizedUserRole === normalizedRole;
+      return userRoles.includes(normalizedRole);
     });
 
     if (!hasRole) {

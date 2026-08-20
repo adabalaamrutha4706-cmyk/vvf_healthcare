@@ -6,7 +6,7 @@ import { DashboardLayout } from '../../../components/DashboardLayout';
 import { api } from '../../../lib/api';
 import { exportToExcel, exportToPDF } from '../../../lib/exportUtils';
 import { 
-  Activity, Clock, Plus, ShieldAlert, CheckCircle, RefreshCw, 
+  Activity, Clock, Plus, Edit3, ShieldAlert, CheckCircle, RefreshCw, 
   Settings, CheckSquare, X, Calendar, Filter, FileSpreadsheet, Download,
   Building2, Users, Search, ClipboardCheck
 } from 'lucide-react';
@@ -92,6 +92,40 @@ export default function AdminTherapies() {
   const [dentistName, setDentistName] = useState('');
   const [remarks, setRemarks] = useState('');
 
+  const DEFAULT_PHYSIOTHERAPY_OPTIONS = [
+    "SIPCD",
+    "Zero gravity Trainer",
+    "Pelvic chair",
+    "TENS",
+    "IFT",
+    "Ultrasound",
+    "Electrical stimulation",
+    "Infrared lamp",
+    "Facial Rejuvention therapy",
+    "Shock wave theory",
+    "Traction - CERVICAL TERACTION",
+    "Traction - LUMBAR TRACTION",
+    "BEHAVIOURAL THEARPY",
+    "PARAFFIN WAX",
+    "GUASHA",
+    "fOOT MASAGER",
+    "ROBOTIC HAND",
+    "UPPER LIMB STRETCHING",
+    "UPPER LIMB STRENGTHENING",
+    "LOWER LIMB STRETCHING",
+    "LOWER LIMB STRENGTHENING",
+    "BACK STRENTHENING EXERCISES",
+    "KNEE ISOMETRICS",
+    "cARDIO-PULMONARY REHAB"
+  ];
+
+  const [selectedPhysioTherapies, setSelectedPhysioTherapies] = useState<string[]>([]);
+  const [customPhysioTherapy, setCustomPhysioTherapy] = useState('');
+  const [physioOptions, setPhysioOptions] = useState<string[]>(DEFAULT_PHYSIOTHERAPY_OPTIONS);
+  const [isEditOptionModalOpen, setIsEditOptionModalOpen] = useState(false);
+  const [optionToEdit, setOptionToEdit] = useState('');
+  const [optionEditValue, setOptionEditValue] = useState('');
+
   const fetchInitialData = async () => {
     setLoading(true);
     try {
@@ -157,6 +191,9 @@ export default function AdminTherapies() {
     setPhysiotherapistName('');
     setTreatmentType('');
     setDentistName('');
+    setSelectedPhysioTherapies([]);
+    setCustomPhysioTherapy('');
+    setPhysioOptions(DEFAULT_PHYSIOTHERAPY_OPTIONS);
     setRemarks('');
     setError('');
     setSuccess('');
@@ -206,6 +243,19 @@ export default function AdminTherapies() {
     setTreatmentType(session.therapy_type === 'Dental' ? session.dive_surface_timings || '' : '');
     setDentistName(session.therapy_type === 'Dental' ? session.pressure_type || '' : '');
     setRemarks(session.remarks || '');
+
+    // Physiotherapy custom routine selection
+    const physioList = session.therapy_type === 'Physiotherapy' && session.dive_surface_timings ? session.dive_surface_timings.split(', ') : [];
+    setSelectedPhysioTherapies(physioList);
+    
+    const combinedOptions = [...DEFAULT_PHYSIOTHERAPY_OPTIONS];
+    physioList.forEach((t: string) => {
+      if (t && !combinedOptions.includes(t)) {
+        combinedOptions.push(t);
+      }
+    });
+    setPhysioOptions(combinedOptions);
+    setCustomPhysioTherapy('');
 
     // Lab
     setSelectedTests(session.tests ? session.tests.split(', ') : []);
@@ -274,6 +324,7 @@ export default function AdminTherapies() {
         payload.next_session_time = nextSessionTime;
       } else if (formTherapyType === 'Physiotherapy') {
         payload.pressure_type = physiotherapistName;
+        payload.dive_surface_timings = selectedPhysioTherapies.join(', ');
         payload.next_session_date = nextSessionDate;
         payload.next_session_time = nextSessionTime;
       } else if (formTherapyType === 'Dental') {
@@ -352,8 +403,16 @@ export default function AdminTherapies() {
           row['WhatsApp Report'] = s.whatsapp_report;
         } else {
           if (activeTab !== 'Hydrogen Inhalation') {
-            row['Dive & Surface'] = s.dive_surface_timings || '--';
-            row['Oxygen Level'] = s.pressure_type ? `${s.pressure_type} = ${s.pressure_value} PSI` : '--';
+            if (activeTab === 'Physiotherapy') {
+              row['Routine/Therapies'] = s.dive_surface_timings || '--';
+              row['Physiotherapist'] = s.pressure_type || '--';
+            } else if (activeTab === 'Dental') {
+              row['Treatment Type'] = s.dive_surface_timings || '--';
+              row['Dentist'] = s.pressure_type || '--';
+            } else {
+              row['Dive & Surface'] = s.dive_surface_timings || '--';
+              row['Oxygen Level'] = s.pressure_type ? `${s.pressure_type} = ${s.pressure_value} PSI` : '--';
+            }
             row['Next Session'] = s.next_session_date ? `${formatDateStr(s.next_session_date)} ${s.next_session_time}` : '--';
           }
           row['OP Technician'] = s.op_technician_name || 'None';
@@ -405,7 +464,21 @@ export default function AdminTherapies() {
           s.status
         ]);
       } else {
-        headers = ['S.No', 'Patient Name', 'Dive/Surface', 'Timings', 'Actual Start', 'End', 'Pressure', 'Next Session', 'OP Tech', 'SOP Tech', 'Status'];
+        const isPhysio = activeTab === 'Physiotherapy';
+        const isDental = activeTab === 'Dental';
+        headers = [
+          'S.No', 
+          'Patient Name', 
+          isPhysio ? 'Routine/Therapies' : isDental ? 'Treatment Type' : 'Dive/Surface', 
+          'Timings', 
+          'Actual Start', 
+          'End', 
+          isPhysio ? 'Physiotherapist' : isDental ? 'Dentist' : 'Pressure', 
+          'Next Session', 
+          'OP Tech', 
+          'SOP Tech', 
+          'Status'
+        ];
         body = sessions.map((s, index) => [
           index + 1,
           s.patient_name,
@@ -413,7 +486,7 @@ export default function AdminTherapies() {
           s.timings || '--',
           s.actual_start || '--',
           s.end_time || '--',
-          s.pressure_value ? `${s.pressure_value} PSI` : '--',
+          isPhysio || isDental ? (s.pressure_type || '--') : (s.pressure_value ? `${s.pressure_value} PSI` : '--'),
           s.next_session_date ? `${formatDateStr(s.next_session_date)}` : '--',
           s.op_technician_name || '--',
           s.sop_technician_name || '--',
@@ -695,13 +768,13 @@ export default function AdminTherapies() {
                       <th className="py-4 px-4">S.No</th>
                       <th className="py-4 px-4">Patient Name</th>
                       <th className="py-4 px-4">Mobile</th>
-                      <th className="py-4 px-4">Dive/Surface</th>
+                      <th className="py-4 px-4">{activeTab === 'Physiotherapy' ? 'Routine/Therapies' : activeTab === 'Dental' ? 'Treatment Type' : 'Dive/Surface'}</th>
                       <th className="py-4 px-4">Timings</th>
                       <th className="py-4 px-4">Rescheduled</th>
                       <th className="py-4 px-4">Actual Start</th>
                       <th className="py-4 px-4">Date</th>
                       <th className="py-4 px-4">End Time</th>
-                      <th className="py-4 px-4">Oxygen Level</th>
+                      <th className="py-4 px-4">{activeTab === 'Physiotherapy' ? 'Physiotherapist' : activeTab === 'Dental' ? 'Dentist' : 'Oxygen Level'}</th>
                       <th className="py-4 px-4">Next Session</th>
                       <th className="py-4 px-4">OP Tech</th>
                       <th className="py-4 px-4">SOP Tech</th>
@@ -825,7 +898,11 @@ export default function AdminTherapies() {
                         <td className="py-3 px-4 whitespace-nowrap">{formatDateStr(row.session_date)}</td>
                         <td className="py-3 px-4">{row.end_time || '--'}</td>
                         <td className="py-3 px-4 whitespace-nowrap">
-                          {row.pressure_type ? (
+                          {row.therapy_type === 'Physiotherapy' || row.therapy_type === 'Dental' ? (
+                            <span className="font-semibold text-slate-800">
+                              {row.pressure_type || '--'}
+                            </span>
+                          ) : row.pressure_type ? (
                             <span className="font-semibold text-slate-800">
                               {row.pressure_type === 'Cylinder Pressure' ? 'Cylinder' : 'Tank'}: {row.pressure_value} PSI
                             </span>
@@ -1143,16 +1220,106 @@ export default function AdminTherapies() {
                           {/* 3. Physiotherapy Form specifics */}
                           {formTherapyType === 'Physiotherapy' && (
                             <div className="col-span-1 md:col-span-2 border border-border-gray p-4 rounded-xl space-y-4 bg-slate-50/50 text-xs animate-fade-in">
-                              <h4 className="font-bold text-[10px] text-slate-400 uppercase tracking-wider">Physiotherapy Details</h4>
-                              <div>
-                                <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Physiotherapist Name</label>
-                                <input
-                                  type="text"
-                                  value={physiotherapistName}
-                                  onChange={(e) => setPhysiotherapistName(e.target.value)}
-                                  placeholder="Dr. Anand S."
-                                  className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none"
-                                />
+                              <h4 className="font-bold text-[10px] text-slate-400 uppercase tracking-wider">Physiotherapist & Routine Details</h4>
+                              <div className="grid grid-cols-1 gap-4">
+                                <div>
+                                  <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Physiotherapist Name</label>
+                                  <input
+                                    type="text"
+                                    value={physiotherapistName}
+                                    onChange={(e) => setPhysiotherapistName(e.target.value)}
+                                    placeholder="Dr. Anand S."
+                                    className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-2">Select Routines / Therapies</label>
+                                  <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto p-1">
+                                    {physioOptions.map(opt => {
+                                      const selected = selectedPhysioTherapies.includes(opt);
+                                      return (
+                                        <div
+                                          key={opt}
+                                          onClick={() => {
+                                            setSelectedPhysioTherapies(prev => 
+                                              prev.includes(opt) ? prev.filter(x => x !== opt) : [...prev, opt]
+                                            );
+                                          }}
+                                          className={`group relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer select-none ${
+                                            selected 
+                                              ? 'bg-primary-green text-white border-primary-green shadow-sm' 
+                                              : 'bg-white text-slate-555 border-border-gray hover:bg-slate-50'
+                                          }`}
+                                        >
+                                          <span>{opt}</span>
+                                          <span className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-1">
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setOptionToEdit(opt);
+                                                setOptionEditValue(opt);
+                                                setIsEditOptionModalOpen(true);
+                                              }}
+                                              className={`p-0.5 rounded transition-colors ${
+                                                selected ? 'hover:bg-white/20 text-white/80' : 'hover:bg-slate-100 text-slate-400'
+                                              }`}
+                                              title="Edit name"
+                                            >
+                                              <Edit3 className="h-3 w-3" />
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setPhysioOptions(prev => prev.filter(o => o !== opt));
+                                                setSelectedPhysioTherapies(prev => prev.filter(o => o !== opt));
+                                              }}
+                                              className={`p-0.5 rounded transition-colors ${
+                                                selected ? 'hover:bg-white/20 text-white/80' : 'hover:bg-slate-100 text-rose-500/80'
+                                              }`}
+                                              title="Delete option"
+                                            >
+                                              <X className="h-3 w-3" />
+                                            </button>
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+
+                                <div className="flex items-end gap-2">
+                                  <div className="flex-1">
+                                    <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Add Custom Therapy / Option</label>
+                                    <input
+                                      type="text"
+                                      value={customPhysioTherapy}
+                                      onChange={(e) => setCustomPhysioTherapy(e.target.value)}
+                                      placeholder="e.g. Laser Therapy"
+                                      className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-slate-555 outline-none"
+                                    />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (customPhysioTherapy.trim()) {
+                                        const val = customPhysioTherapy.trim();
+                                        if (!physioOptions.includes(val)) {
+                                          setPhysioOptions(prev => [...prev, val]);
+                                        }
+                                        if (!selectedPhysioTherapies.includes(val)) {
+                                          setSelectedPhysioTherapies(prev => [...prev, val]);
+                                        }
+                                        setCustomPhysioTherapy('');
+                                      }
+                                    }}
+                                    className="px-4 py-2 bg-primary-green text-white rounded-xl text-xs font-bold hover:bg-emerald-600 transition-colors h-[38px] cursor-pointer"
+                                  >
+                                    Add Option
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           )}
@@ -1385,6 +1552,58 @@ export default function AdminTherapies() {
           )}
         </AnimatePresence>
 
+      {isEditOptionModalOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/55 backdrop-blur-sm animate-fade-in" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm border border-border-gray shadow-xl animate-scale-up" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-bold text-slate-800 mb-2">Edit Therapy Option</h3>
+            <p className="text-xs text-slate-400 mb-4">Update the name of this routine/therapy below.</p>
+            <input
+              type="text"
+              value={optionEditValue}
+              onChange={(e) => setOptionEditValue(e.target.value)}
+              className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-slate-555 outline-none mb-4"
+              placeholder="Therapy name"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (optionEditValue.trim() && optionEditValue.trim() !== optionToEdit) {
+                    const trimmed = optionEditValue.trim();
+                    setPhysioOptions(prev => prev.map(o => o === optionToEdit ? trimmed : o));
+                    setSelectedPhysioTherapies(prev => prev.map(o => o === optionToEdit ? trimmed : o));
+                  }
+                  setIsEditOptionModalOpen(false);
+                } else if (e.key === 'Escape') {
+                  setIsEditOptionModalOpen(false);
+                }
+              }}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsEditOptionModalOpen(false)}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (optionEditValue.trim() && optionEditValue.trim() !== optionToEdit) {
+                    const trimmed = optionEditValue.trim();
+                    setPhysioOptions(prev => prev.map(o => o === optionToEdit ? trimmed : o));
+                    setSelectedPhysioTherapies(prev => prev.map(o => o === optionToEdit ? trimmed : o));
+                  }
+                  setIsEditOptionModalOpen(false);
+                }}
+                className="px-3.5 py-2 bg-primary-green hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </DashboardLayout>
   );

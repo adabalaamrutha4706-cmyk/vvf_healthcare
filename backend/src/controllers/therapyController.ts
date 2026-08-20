@@ -99,9 +99,18 @@ export const getTherapies = async (req: AuthenticatedRequest, res: Response) => 
     if (userRole === 'OP Technician') {
       sql += ` AND op_technician_id = $${paramIdx++}`;
       params.push(userId);
+      if (req.user?.assigned_therapy) {
+        sql += ` AND therapy_type = $${paramIdx++}`;
+        params.push(req.user.assigned_therapy);
+      }
     } else if (userRole === 'SOP Technician') {
-      sql += ` AND sop_technician_id = $${paramIdx++}`;
-      params.push(userId);
+      if (req.user?.assigned_therapy) {
+        sql += ` AND therapy_type = $${paramIdx++}`;
+        params.push(req.user.assigned_therapy);
+      } else {
+        sql += ` AND sop_technician_id = $${paramIdx++}`;
+        params.push(userId);
+      }
     }
 
     // Input filters
@@ -243,6 +252,16 @@ export const createTherapy = async (req: AuthenticatedRequest, res: Response) =>
         message: 'Required master fields (Patient Name, Mobile Number, Therapy Type, Date, Hospital) are missing.',
         errorCode: 'VALIDATION_ERROR'
       });
+    }
+
+    if (req.user?.role === 'OP Technician' && req.user?.assigned_therapy) {
+      if (therapy_type !== req.user.assigned_therapy) {
+        return res.status(400).json({
+          success: false,
+          message: `Access denied. You can only create sessions for your assigned therapy: ${req.user.assigned_therapy}.`,
+          errorCode: 'VALIDATION_ERROR'
+        });
+      }
     }
 
     // Insert into therapy_sessions

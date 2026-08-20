@@ -15,7 +15,7 @@ import { SelectField } from '../../components/SelectField';
 import { ReportFilterPanel } from '../../components/ReportFilterPanel';
 import { exportToExcel, exportToPDF, exportPaymentsToPDF } from '../../lib/exportUtils';
 
-export const isUPIMethod = (method: string): boolean => {
+const isUPIMethod = (method: string): boolean => {
   const m = (method || '').toLowerCase().trim();
   if (m.includes('cash')) return false;
   if (m.includes('card') && !m.includes('upi')) return false;
@@ -32,7 +32,7 @@ export const isUPIMethod = (method: string): boolean => {
   );
 };
 
-export const mapLegacyPaymentMethod = (method: string): 'Cash' | 'UPI' | 'Card' => {
+const mapLegacyPaymentMethod = (method: string): 'Cash' | 'UPI' | 'Card' => {
   if (isUPIMethod(method)) return 'UPI';
   const m = (method || '').toLowerCase().trim();
   if (m.includes('cash')) return 'Cash';

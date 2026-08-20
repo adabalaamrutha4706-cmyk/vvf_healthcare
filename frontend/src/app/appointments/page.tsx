@@ -1,21 +1,21 @@
 'use client';
 
 import React, { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '../../context/AuthContext';
 import { DashboardLayout } from '../../components/DashboardLayout';
 import { api } from '../../lib/api';
 import { 
   Calendar as CalendarIcon, User, Search, Filter, Plus, Edit3, Trash2, 
   Lock, CheckCircle, Clock, IndianRupee, ShieldAlert, Sparkles, X, HeartHandshake,
-  Eye, MoreVertical, PhoneCall, Activity, Droplet, Settings, CheckSquare
+  Eye, MoreVertical, PhoneCall, Activity, Droplet, Settings, CheckSquare, AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SelectField } from '../../components/SelectField';
 import { ReportFilterPanel } from '../../components/ReportFilterPanel';
 import { exportToExcel, exportToPDF } from '../../lib/exportUtils';
 
-export const isUPIMethod = (method: string): boolean => {
+const isUPIMethod = (method: string): boolean => {
   const m = (method || '').toLowerCase().trim();
   if (m.includes('cash')) return false;
   if (m.includes('card') && !m.includes('upi')) return false;
@@ -32,7 +32,7 @@ export const isUPIMethod = (method: string): boolean => {
   );
 };
 
-export const mapLegacyPaymentMethod = (method: string): 'Cash' | 'UPI' | 'Card' => {
+const mapLegacyPaymentMethod = (method: string): 'Cash' | 'UPI' | 'Card' => {
   if (isUPIMethod(method)) return 'UPI';
   const m = (method || '').toLowerCase().trim();
   if (m.includes('cash')) return 'Cash';
@@ -49,6 +49,8 @@ const formatDesignation = (role?: string) => {
   if (r === 'Superadmin') return 'Superadmin';
   if (r === 'Doctor') return 'Doctor';
   if (r === 'Dental Doctor') return 'Dental Doctor';
+  if (r === 'Dentist Junior') return 'Dentist Junior';
+  if (r === 'Dental Assistant') return 'Dental Assistant';
   if (r === 'OP Technician') return 'OP Technician';
   if (r === 'SOP Technician') return 'SOP Technician';
   return r;
@@ -57,6 +59,22 @@ const formatDesignation = (role?: string) => {
 function AppointmentsContent() {
   const { user } = useAuth();
   const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const getRolePrefix = (role: string): string => {
+    const r = role.toLowerCase().trim();
+    if (r === 'admin' || r === 'superadmin' || r === 'co-admin') return '/admin';
+    if (r === 'dental doctor') return '/dental-doctor';
+    if (r === 'dentist junior') return '/dentist-junior';
+    if (r === 'dental assistant') return '/dental-assistant';
+    if (r === 'doctor') return '/doctor';
+    if (r === 'executive') return '/executive';
+    if (r === 'reception') return '/reception';
+    if (r === 'telecaller') return '/telecaller';
+    if (r === 'op technician') return '/op-technician';
+    if (r === 'sop technician') return '/sop-technician';
+    return '';
+  };
   
   // Lists
   const [appointments, setAppointments] = useState<any[]>([]);
@@ -138,6 +156,40 @@ function AppointmentsContent() {
   const [treatmentTypeTherapy, setTreatmentTypeTherapy] = useState('');
   const [dentistNameTherapy, setDentistNameTherapy] = useState('');
 
+  const DEFAULT_PHYSIOTHERAPY_OPTIONS = [
+    "SIPCD",
+    "Zero gravity Trainer",
+    "Pelvic chair",
+    "TENS",
+    "IFT",
+    "Ultrasound",
+    "Electrical stimulation",
+    "Infrared lamp",
+    "Facial Rejuvention therapy",
+    "Shock wave theory",
+    "Traction - CERVICAL TERACTION",
+    "Traction - LUMBAR TRACTION",
+    "BEHAVIOURAL THEARPY",
+    "PARAFFIN WAX",
+    "GUASHA",
+    "fOOT MASAGER",
+    "ROBOTIC HAND",
+    "UPPER LIMB STRETCHING",
+    "UPPER LIMB STRENGTHENING",
+    "LOWER LIMB STRETCHING",
+    "LOWER LIMB STRENGTHENING",
+    "BACK STRENTHENING EXERCISES",
+    "KNEE ISOMETRICS",
+    "cARDIO-PULMONARY REHAB"
+  ];
+
+  const [selectedPhysioTherapiesTherapy, setSelectedPhysioTherapiesTherapy] = useState<string[]>([]);
+  const [customPhysioTherapyTherapy, setCustomPhysioTherapyTherapy] = useState('');
+  const [physioOptionsTherapy, setPhysioOptionsTherapy] = useState<string[]>(DEFAULT_PHYSIOTHERAPY_OPTIONS);
+  const [isEditOptionModalOpen, setIsEditOptionModalOpen] = useState(false);
+  const [optionToEdit, setOptionToEdit] = useState('');
+  const [optionEditValue, setOptionEditValue] = useState('');
+
   const LAB_TEST_OPTIONS = ['CBC', 'LFT', 'KFT', 'Lipid Profile', 'Blood Sugar', 'ECG', 'Others'];
 
   const formatDateStr = (dateStr: string) => {
@@ -175,6 +227,18 @@ function AppointmentsContent() {
   const [notes, setNotes] = useState('');
   const [totalAmount, setTotalAmount] = useState('');
 
+  // New Fields
+  const [coRelation, setCoRelation] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [bloodGroup, setBloodGroup] = useState('');
+  const [city, setCity] = useState('');
+  const [address, setAddress] = useState('');
+  const [diagnosis, setDiagnosis] = useState('');
+  const [reference, setReference] = useState('');
+  const [consultationCharges, setConsultationCharges] = useState('');
+  const [testsCharges, setTestsCharges] = useState('');
+  const [medicineCharges, setMedicineCharges] = useState('');
+
   // Category specific fields
   const [formCategory, setFormCategory] = useState<'doctor' | 'dental' | 'services' | null>(null);
   const [patientId, setPatientId] = useState('');
@@ -198,7 +262,7 @@ function AppointmentsContent() {
         try {
           const u = JSON.parse(stored);
           if (u.role === 'Doctor') return 'doctor';
-          if (u.role === 'Dental Doctor') return 'dental';
+          if (u.role === 'Dental Doctor' || u.role === 'Dentist Junior' || u.role === 'Dental Assistant') return 'dental';
           if (u.role === 'OP Technician' || u.role === 'SOP Technician') return 'services';
         } catch (e) {}
       }
@@ -320,6 +384,56 @@ function AppointmentsContent() {
     validateContactNumber(val);
   };
 
+  useEffect(() => {
+    const fetchPatientData = async () => {
+      if (selectedApp) return; // Only auto-fill for new appointments
+      const cleanName = patientName.trim();
+      const cleanPhone = contactNumber.trim();
+      const isNameValid = cleanName.length >= 3 && /^[A-Za-z\s\.]*$/.test(cleanName);
+      const isPhoneValid = /^\d{10}$/.test(cleanPhone);
+      
+      if (isNameValid && isPhoneValid) {
+        try {
+          const res = await api.appointments.lookupPatient({ name: cleanName, phone: cleanPhone });
+          if (res && res.patient) {
+            const p = res.patient;
+            if (p.patient_id) setPatientId(p.patient_id);
+            if (p.age) setAge(p.age.toString());
+            if (p.gender) setGender(p.gender);
+          }
+        } catch (err) {
+          console.error('Failed to lookup patient:', err);
+        }
+      }
+    };
+    fetchPatientData();
+  }, [patientName, contactNumber, selectedApp]);
+
+  const handlePatientIdSearch = async () => {
+    const cleanId = patientId.trim();
+    if (!cleanId) {
+      alert('Please enter a Patient ID to search.');
+      return;
+    }
+    try {
+      const res = await api.appointments.lookupPatient({ patient_id: cleanId });
+      if (res && res.patient) {
+        const p = res.patient;
+        setPatientName(p.name || '');
+        setContactNumber(p.phone || '');
+        setAge(p.age ? p.age.toString() : '');
+        setGender(p.gender || 'Male');
+        setPatientNameError('');
+        setContactNumberError('');
+      } else {
+        alert('No patient found with this ID.');
+      }
+    } catch (err) {
+      console.error('Failed to lookup patient by ID:', err);
+      alert('Error searching for patient ID.');
+    }
+  };
+
   const handleAppointmentDateChange = (val: string) => {
     setAppointmentDate(val);
     validateAppointmentDate(val);
@@ -361,7 +475,7 @@ function AppointmentsContent() {
     if (user) {
       if (user.role === 'Doctor') {
         setCategoryFilter('doctor');
-      } else if (user.role === 'Dental Doctor') {
+      } else if (user.role === 'Dental Doctor' || user.role === 'Dentist Junior' || user.role === 'Dental Assistant') {
         setCategoryFilter('dental');
       } else if (user.role === 'OP Technician' || user.role === 'SOP Technician') {
         setCategoryFilter('services');
@@ -571,27 +685,51 @@ function AppointmentsContent() {
 
   const handleOpenCreate = () => {
     setSelectedApp(null);
-    setFormCategory(null); // Shows category picker first
+
+    const qDoctorId = searchParams.get('doctorId');
+    const qTechnicianId = searchParams.get('technicianId');
+    const qRole = searchParams.get('role');
+
+    let initialCategory: 'doctor' | 'dental' | 'services' | null = null;
+    if (qRole) {
+      if (qRole === 'Doctor') initialCategory = 'doctor';
+      else if (['Dental Doctor', 'Dentist Junior', 'Dental Assistant'].includes(qRole)) initialCategory = 'dental';
+      else if (['OP Technician', 'SOP Technician'].includes(qRole)) initialCategory = 'services';
+    }
+
+    setFormCategory(initialCategory);
     setPatientName('');
     setPatientId('');
     setAge('');
     setGender('Male');
     setContactNumber('');
     setHospitalId(hospitals[0]?.id?.toString() || '');
-    setDoctorId(doctors[0]?.id?.toString() || '');
+    setDoctorId(qDoctorId || doctors[0]?.id?.toString() || '');
     // Category specific fields
     setDepartment('');
     setVisitType('New');
     setChiefComplaint('');
     setDentalConcern('');
     setTreatmentType('');
-    setTechnicianId(technicians[0]?.id?.toString() || '');
+    setTechnicianId(qTechnicianId || technicians[0]?.id?.toString() || '');
     setNumberOfSessions('');
     setSessionDuration('');
     setPackageType('');
     setServiceRemarks('');
     setServiceName('HBOT');
     
+    // New Fields
+    setCoRelation('');
+    setDateOfBirth('');
+    setBloodGroup('');
+    setCity('');
+    setAddress('');
+    setDiagnosis('');
+    setReference('');
+    setConsultationCharges('');
+    setTestsCharges('');
+    setMedicineCharges('');
+
     // Default tomorrow
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -631,6 +769,18 @@ function AppointmentsContent() {
     setPackageType(app.package_type || '');
     setServiceRemarks(app.service_remarks || '');
     setServiceName(app.service_name || 'HBOT');
+
+    // New Fields
+    setCoRelation(app.co_relation || '');
+    setDateOfBirth(app.date_of_birth ? new Date(app.date_of_birth).toISOString().split('T')[0] : '');
+    setBloodGroup(app.blood_group || '');
+    setCity(app.city || '');
+    setAddress(app.address || '');
+    setDiagnosis(app.diagnosis || '');
+    setReference(app.reference || '');
+    setConsultationCharges(app.consultation_charges ? app.consultation_charges.toString() : '');
+    setTestsCharges(app.tests_charges ? app.tests_charges.toString() : '');
+    setMedicineCharges(app.medicine_charges ? app.medicine_charges.toString() : '');
 
     setError('');
     setSuccess('');
@@ -690,6 +840,9 @@ function AppointmentsContent() {
     setPhysiotherapistNameTherapy('');
     setTreatmentTypeTherapy('');
     setDentistNameTherapy('');
+    setSelectedPhysioTherapiesTherapy([]);
+    setCustomPhysioTherapyTherapy('');
+    setPhysioOptionsTherapy(DEFAULT_PHYSIOTHERAPY_OPTIONS);
     setRemarksTherapy('');
     setError('');
     setSuccess('');
@@ -738,6 +891,19 @@ function AppointmentsContent() {
     setTreatmentTypeTherapy(session.therapy_type === 'Dental' ? session.dive_surface_timings || '' : '');
     setDentistNameTherapy(session.therapy_type === 'Dental' ? session.pressure_type || '' : '');
     setRemarksTherapy(session.remarks || '');
+
+    // Physiotherapy custom routine selection
+    const physioList = session.therapy_type === 'Physiotherapy' && session.dive_surface_timings ? session.dive_surface_timings.split(', ') : [];
+    setSelectedPhysioTherapiesTherapy(physioList);
+    
+    const combinedOptions = [...DEFAULT_PHYSIOTHERAPY_OPTIONS];
+    physioList.forEach((t: string) => {
+      if (t && !combinedOptions.includes(t)) {
+        combinedOptions.push(t);
+      }
+    });
+    setPhysioOptionsTherapy(combinedOptions);
+    setCustomPhysioTherapyTherapy('');
 
     // Lab
     setSelectedTestsTherapy(session.tests ? session.tests.split(', ') : []);
@@ -807,6 +973,7 @@ function AppointmentsContent() {
         payload.next_session_time = nextSessionTimeTherapy;
       } else if (formTherapyType === 'Physiotherapy') {
         payload.pressure_type = physiotherapistNameTherapy;
+        payload.dive_surface_timings = selectedPhysioTherapiesTherapy.join(', ');
         payload.next_session_date = nextSessionDateTherapy;
         payload.next_session_time = nextSessionTimeTherapy;
       } else if (formTherapyType === 'Dental') {
@@ -833,6 +1000,12 @@ function AppointmentsContent() {
       }
       setIsTherapyModalOpen(false);
       fetchData();
+
+      const prefix = getRolePrefix(user?.role || '');
+      const dashboardHref = user?.role === 'Superadmin' ? '/superadmin/dashboard' : `${prefix}/dashboard`;
+      setTimeout(() => {
+        router.push(dashboardHref);
+      }, 1000);
     } catch (err: any) {
       setError(err.message || 'Failed to save therapy session.');
     } finally {
@@ -932,7 +1105,17 @@ function AppointmentsContent() {
       notes,
       total_amount: parseFloat(totalAmount || '0'),
       appointment_type: type,
-      patient_id: patientId || null
+      patient_id: patientId || null,
+      co_relation: coRelation || null,
+      date_of_birth: dateOfBirth || null,
+      blood_group: bloodGroup || null,
+      city: city || null,
+      address: address || null,
+      diagnosis: diagnosis || null,
+      reference: reference || null,
+      consultation_charges: consultationCharges ? parseFloat(consultationCharges) : null,
+      tests_charges: testsCharges ? parseFloat(testsCharges) : null,
+      medicine_charges: medicineCharges ? parseFloat(medicineCharges) : null
     };
 
     if (type === 'doctor') {
@@ -963,6 +1146,12 @@ function AppointmentsContent() {
       }
       setIsFormOpen(false);
       fetchData();
+
+      const prefix = getRolePrefix(user?.role || '');
+      const dashboardHref = user?.role === 'Superadmin' ? '/superadmin/dashboard' : `${prefix}/dashboard`;
+      setTimeout(() => {
+        router.push(dashboardHref);
+      }, 1000);
     } catch (err: any) {
       setError(err.message || 'Validation error. Please verify input fields.');
     } finally {
@@ -1269,7 +1458,7 @@ function AppointmentsContent() {
             </p>
           </div>
 
-          {(['Admin', 'Reception'].includes(user?.role || '')) && (
+          {(user?.role) && (
             activeSubTab === 'appointments' ? (
               <button
                 id="btn-new-appointment"
@@ -1585,7 +1774,7 @@ function AppointmentsContent() {
                         <div className="flex items-center gap-2 text-xs text-slate-500">
                           <CalendarIcon className="h-3.5 w-3.5 text-primary-green" />
                           <span>
-                            {appDate.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })} • {appDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {appDate.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' })} • {appDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true })}
                           </span>
                         </div>
                         <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -1899,8 +2088,13 @@ function AppointmentsContent() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 0.4 }}
                 exit={{ opacity: 0 }}
-                onClick={() => setIsFormOpen(false)}
-                className="fixed inset-0 bg-slate-900"
+                onClick={() => {
+                  setIsFormOpen(false);
+                  const prefix = getRolePrefix(user?.role || '');
+                  const dashboardHref = user?.role === 'Superadmin' ? '/superadmin/dashboard' : `${prefix}/dashboard`;
+                  router.push(dashboardHref);
+                }}
+                className="fixed inset-0 bg-slate-900 cursor-pointer"
               />
               
               <motion.div
@@ -1914,7 +2108,16 @@ function AppointmentsContent() {
                     <Sparkles className="h-4.5 w-4.5 text-primary-green animate-pulse" />
                     {selectedApp ? 'Modify Appointment Record' : 'Create Appointment Record'}
                   </h3>
-                  <button id="close-form-modal" onClick={() => setIsFormOpen(false)} className="text-slate-500 hover:text-primary-green cursor-pointer">
+                  <button
+                    id="close-form-modal"
+                    onClick={() => {
+                      setIsFormOpen(false);
+                      const prefix = getRolePrefix(user?.role || '');
+                      const dashboardHref = user?.role === 'Superadmin' ? '/superadmin/dashboard' : `${prefix}/dashboard`;
+                      router.push(dashboardHref);
+                    }}
+                    className="text-slate-500 hover:text-primary-green cursor-pointer"
+                  >
                     <X className="h-4.5 w-4.5" />
                   </button>
                 </div>
@@ -2016,6 +2219,7 @@ function AppointmentsContent() {
                             id="form-patient-name"
                             type="text"
                             required
+                            maxLength={100}
                             value={patientName}
                             onChange={(e) => handlePatientNameChange(e.target.value)}
                             placeholder="John Doe"
@@ -2027,34 +2231,87 @@ function AppointmentsContent() {
                         </div>
                         <div>
                           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 font-semibold">Patient ID (Optional)</label>
+                          <div className="flex gap-2">
+                            <input
+                              id="form-patient-id"
+                              type="text"
+                              maxLength={30}
+                              value={patientId}
+                              onChange={(e) => setPatientId(e.target.value)}
+                              placeholder="PT-12345"
+                              className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={handlePatientIdSearch}
+                              className="px-3 py-2 text-xs font-semibold text-primary-green bg-very-light-green border border-emerald-500/30 rounded-xl hover:bg-very-light-green/60 whitespace-nowrap cursor-pointer"
+                            >
+                              Search ID
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 font-semibold font-semibold">C/o (S/o, W/o, D/o)</label>
                           <input
-                            id="form-patient-id"
+                            id="form-co-relation"
                             type="text"
-                            value={patientId}
-                            onChange={(e) => setPatientId(e.target.value)}
-                            placeholder="PT-12345"
+                            value={coRelation}
+                            onChange={(e) => setCoRelation(e.target.value)}
+                            placeholder="S/o or W/o"
+                            className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 font-semibold font-semibold">Date Of Birth</label>
+                          <input
+                            id="form-dob"
+                            type="date"
+                            value={dateOfBirth}
+                            onChange={(e) => {
+                              const dobVal = e.target.value;
+                              setDateOfBirth(dobVal);
+                              if (dobVal) {
+                                const birthDate = new Date(dobVal);
+                                const today = new Date();
+                                let calculatedAge = today.getFullYear() - birthDate.getFullYear();
+                                const m = today.getMonth() - birthDate.getMonth();
+                                if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+                                  calculatedAge--;
+                                }
+                                if (calculatedAge >= 0) {
+                                  setAge(calculatedAge.toString());
+                                }
+                              }
+                            }}
                             className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none"
                           />
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                         <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 font-semibold">Patient Age *</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 font-semibold font-semibold">Patient Age *</label>
                           <input
                             id="form-age"
                             type="number"
                             required
                             min="0"
                             max="130"
+                            maxLength={3}
                             value={age}
-                            onChange={(e) => setAge(e.target.value)}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (v.length <= 3) setAge(v);
+                            }}
                             placeholder="35"
                             className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none"
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 font-semibold">Gender *</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 font-semibold font-semibold">Gender *</label>
                           <SelectField
                             id="form-gender"
                             value={gender}
@@ -2068,11 +2325,24 @@ function AppointmentsContent() {
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 font-semibold">Contact Number *</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 font-semibold font-semibold">Blood Group</label>
+                          <input
+                            id="form-blood-group"
+                            type="text"
+                            maxLength={10}
+                            value={bloodGroup}
+                            onChange={(e) => setBloodGroup(e.target.value)}
+                            placeholder="O+ve"
+                            className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 font-semibold font-semibold">Contact Number *</label>
                           <input
                             id="form-contact-number"
                             type="tel"
                             required
+                            maxLength={10}
                             value={contactNumber}
                             onChange={(e) => handleContactNumberChange(e.target.value)}
                             placeholder="9876543210"
@@ -2081,6 +2351,43 @@ function AppointmentsContent() {
                           {contactNumberError && (
                             <p className="text-[10px] text-rose-700 mt-1 font-semibold">{contactNumberError}</p>
                           )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 font-semibold font-semibold">City</label>
+                          <SelectField
+                            id="form-city"
+                            value={city}
+                            onChange={setCity}
+                            triggerClassName="py-2 px-3 text-xs text-slate-550"
+                            options={[
+                              { value: '', label: 'Select City' },
+                              { value: 'Vijayawada', label: 'Vijayawada' },
+                              { value: 'Guntur', label: 'Guntur' },
+                              { value: 'Visakhapatnam', label: 'Visakhapatnam' },
+                              { value: 'Tirupati', label: 'Tirupati' },
+                              { value: 'Nellore', label: 'Nellore' },
+                              { value: 'Kurnool', label: 'Kurnool' },
+                              { value: 'Rajahmundry', label: 'Rajahmundry' },
+                              { value: 'Kakinada', label: 'Kakinada' },
+                              { value: 'Eluru', label: 'Eluru' },
+                              { value: 'Hyderabad', label: 'Hyderabad' },
+                              { value: 'Other', label: 'Other' }
+                            ]}
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 font-semibold font-semibold">Address</label>
+                          <input
+                            id="form-address"
+                            type="text"
+                            value={address}
+                            onChange={(e) => setAddress(e.target.value)}
+                            placeholder="Door No, Street Name, Landmark..."
+                            className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none"
+                          />
                         </div>
                       </div>
 
@@ -2310,24 +2617,121 @@ function AppointmentsContent() {
                         </div>
                       )}
 
-                      {/* Shared Financial & Diagnostic Notes */}
+                      {/* Diagnostic & Reference Section */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 font-semibold">Consultation Total Fee (₹) *</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 font-semibold font-semibold">Diagnosis</label>
+                          <input
+                            id="form-diagnosis"
+                            type="text"
+                            value={diagnosis}
+                            onChange={(e) => setDiagnosis(e.target.value)}
+                            placeholder="Diagnosis"
+                            className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 font-semibold font-semibold">Reference</label>
+                          <SelectField
+                            id="form-reference"
+                            value={reference}
+                            onChange={setReference}
+                            triggerClassName="py-2 px-3 text-xs text-slate-550"
+                            options={[
+                              { value: '', label: 'Reference' },
+                              { value: 'Walk-in', label: 'Walk-in' },
+                              { value: 'Doctor Referral', label: 'Doctor Referral' },
+                              { value: 'Google Search', label: 'Google Search' },
+                              { value: 'Social Media', label: 'Social Media' },
+                              { value: 'Friend/Family', label: 'Friend/Family' },
+                              { value: 'Camp', label: 'Camp' },
+                              { value: 'Telecaller Outreach', label: 'Telecaller Outreach' },
+                              { value: 'Other', label: 'Other' }
+                            ]}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Billing Breakdown */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 font-semibold font-semibold">Consultation Charges (₹)</label>
+                          <input
+                            id="form-consultation-charges"
+                            type="number"
+                            min="0"
+                            value={consultationCharges}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setConsultationCharges(val);
+                              const c = parseFloat(val || '0');
+                              const t = parseFloat(testsCharges || '0');
+                              const m = parseFloat(medicineCharges || '0');
+                              setTotalAmount((c + t + m).toString());
+                            }}
+                            placeholder="Consultation Charges"
+                            className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 font-semibold font-semibold">Tests Charges (₹)</label>
+                          <input
+                            id="form-tests-charges"
+                            type="number"
+                            min="0"
+                            value={testsCharges}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setTestsCharges(val);
+                              const c = parseFloat(consultationCharges || '0');
+                              const t = parseFloat(val || '0');
+                              const m = parseFloat(medicineCharges || '0');
+                              setTotalAmount((c + t + m).toString());
+                            }}
+                            placeholder="Tests Charges"
+                            className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 font-semibold font-semibold">Medicine Charges (₹)</label>
+                          <input
+                            id="form-medicine-charges"
+                            type="number"
+                            min="0"
+                            value={medicineCharges}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setMedicineCharges(val);
+                              const c = parseFloat(consultationCharges || '0');
+                              const t = parseFloat(testsCharges || '0');
+                              const m = parseFloat(val || '0');
+                              setTotalAmount((c + t + m).toString());
+                            }}
+                            placeholder="Medicine Charges"
+                            className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Total Amount & Notes */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 font-semibold font-semibold">Total Amount (₹) *</label>
                           <input
                             id="form-total-amount"
                             type="text"
                             required
                             value={totalAmount}
                             onChange={(e) => handleTotalAmountChange(e.target.value)}
+                            placeholder="Total Amount"
                             className={`w-full bg-white border ${totalAmountError ? 'border-red-500 focus:border-red-500 focus:ring-red-100' : 'border-border-gray focus:border-primary-green focus:ring-light-green'} focus:ring-1 rounded-xl py-2 px-3 text-xs text-slate-500 outline-none`}
                           />
                           {totalAmountError && (
-                            <p className="text-[10px] text-rose-700 mt-1 font-semibold">{totalAmountError}</p>
+                            <p className="text-[10px] text-rose-700 mt-1 font-semibold font-semibold">{totalAmountError}</p>
                           )}
                         </div>
                         <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 font-semibold">Diagnostic / Visit Notes</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 font-semibold font-semibold">Diagnostic / Visit Notes</label>
                           <input
                             id="form-notes"
                             type="text"
@@ -2344,7 +2748,12 @@ function AppointmentsContent() {
                         <button
                           id="btn-cancel-form"
                           type="button"
-                          onClick={() => setIsFormOpen(false)}
+                          onClick={() => {
+                            setIsFormOpen(false);
+                            const prefix = getRolePrefix(user?.role || '');
+                            const dashboardHref = user?.role === 'Superadmin' ? '/superadmin/dashboard' : `${prefix}/dashboard`;
+                            router.push(dashboardHref);
+                          }}
                           className="px-4 py-2 border border-border-gray hover:bg-slate-550 text-xs text-slate-500 rounded-xl transition-all cursor-pointer font-semibold"
                         >
                           Cancel
@@ -2365,6 +2774,43 @@ function AppointmentsContent() {
                     </>
                   )}
                 </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Warning Error Dialog Overlay */}
+        <AnimatePresence>
+          {error && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 0.4 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setError('')}
+                className="fixed inset-0 bg-slate-900"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="w-full max-w-sm bg-white border border-border-gray rounded-2xl shadow-2xl p-6 z-10 flex flex-col items-center text-center gap-4"
+              >
+                <div className="p-3 bg-amber-50 text-amber-500 rounded-full">
+                  <AlertTriangle className="h-10 w-10 animate-bounce" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-slate-700">Warning</h4>
+                  <p className="text-xs text-slate-500 mt-2 font-medium leading-relaxed">{error}</p>
+                </div>
+                <button
+                  id="btn-error-ok"
+                  type="button"
+                  onClick={() => setError('')}
+                  className="w-full py-2.5 px-4 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-xl shadow-md transition-all cursor-pointer"
+                >
+                  OK
+                </button>
               </motion.div>
             </div>
           )}
@@ -3257,7 +3703,12 @@ function AppointmentsContent() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 0.6 }}
                 exit={{ opacity: 0 }}
-                onClick={() => setIsTherapyModalOpen(false)}
+                onClick={() => {
+                  setIsTherapyModalOpen(false);
+                  const prefix = getRolePrefix(user?.role || '');
+                  const dashboardHref = user?.role === 'Superadmin' ? '/superadmin/dashboard' : `${prefix}/dashboard`;
+                  router.push(dashboardHref);
+                }}
                 className="fixed inset-0 bg-black cursor-pointer"
               />
 
@@ -3274,7 +3725,16 @@ function AppointmentsContent() {
                       <Settings className="h-4.5 w-4.5 text-primary-green animate-pulse" />
                       {isEditingTherapy ? `Edit ${formTherapyType === 'Hydrogen Inhalation' ? 'Hydrogen' : formTherapyType} Session Details` : `Schedule New Therapy Session`}
                     </h3>
-                    <button type="button" onClick={() => setIsTherapyModalOpen(false)} className="text-slate-500 hover:text-primary-green cursor-pointer">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsTherapyModalOpen(false);
+                        const prefix = getRolePrefix(user?.role || '');
+                        const dashboardHref = user?.role === 'Superadmin' ? '/superadmin/dashboard' : `${prefix}/dashboard`;
+                        router.push(dashboardHref);
+                      }}
+                      className="text-slate-500 hover:text-primary-green cursor-pointer"
+                    >
                       <X className="h-4.5 w-4.5" />
                     </button>
                   </div>
@@ -3527,16 +3987,106 @@ function AppointmentsContent() {
 
                       {formTherapyType === 'Physiotherapy' && (
                         <div className="col-span-1 md:col-span-2 border border-border-gray p-4 rounded-xl space-y-4 bg-slate-50/50 text-xs animate-fade-in">
-                          <h4 className="font-bold text-[10px] text-slate-400 uppercase tracking-wider">Physiotherapist Details</h4>
-                          <div>
-                            <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Physiotherapist assigned</label>
-                            <input
-                              type="text"
-                              value={physiotherapistNameTherapy}
-                              onChange={(e) => setPhysiotherapistNameTherapy(e.target.value)}
-                              placeholder="Dr. Roy"
-                              className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-slate-550 outline-none"
-                            />
+                          <h4 className="font-bold text-[10px] text-slate-400 uppercase tracking-wider">Physiotherapist & Routine Details</h4>
+                          <div className="grid grid-cols-1 gap-4">
+                            <div>
+                              <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Physiotherapist assigned</label>
+                              <input
+                                type="text"
+                                value={physiotherapistNameTherapy}
+                                onChange={(e) => setPhysiotherapistNameTherapy(e.target.value)}
+                                placeholder="Dr. Roy"
+                                className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-slate-550 outline-none"
+                              />
+                            </div>
+                            
+                            <div>
+                              <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-2">Select Routines / Therapies</label>
+                              <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto p-1">
+                                {physioOptionsTherapy.map(opt => {
+                                  const selected = selectedPhysioTherapiesTherapy.includes(opt);
+                                  return (
+                                    <div
+                                      key={opt}
+                                      onClick={() => {
+                                        setSelectedPhysioTherapiesTherapy(prev => 
+                                          prev.includes(opt) ? prev.filter(x => x !== opt) : [...prev, opt]
+                                        );
+                                      }}
+                                      className={`group relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer select-none ${
+                                        selected 
+                                          ? 'bg-primary-green text-white border-primary-green shadow-sm' 
+                                          : 'bg-white text-slate-555 border-border-gray hover:bg-slate-50'
+                                      }`}
+                                    >
+                                      <span>{opt}</span>
+                                      <span className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity ml-1">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOptionToEdit(opt);
+                                            setOptionEditValue(opt);
+                                            setIsEditOptionModalOpen(true);
+                                          }}
+                                          className={`p-0.5 rounded transition-colors ${
+                                            selected ? 'hover:bg-white/20 text-white/80' : 'hover:bg-slate-100 text-slate-400'
+                                          }`}
+                                          title="Edit name"
+                                        >
+                                          <Edit3 className="h-3 w-3" />
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setPhysioOptionsTherapy(prev => prev.filter(o => o !== opt));
+                                            setSelectedPhysioTherapiesTherapy(prev => prev.filter(o => o !== opt));
+                                          }}
+                                          className={`p-0.5 rounded transition-colors ${
+                                            selected ? 'hover:bg-white/20 text-white/80' : 'hover:bg-slate-100 text-rose-500/80'
+                                          }`}
+                                          title="Delete option"
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </button>
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            <div className="flex items-end gap-2">
+                              <div className="flex-1">
+                                <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Add Custom Therapy / Option</label>
+                                <input
+                                  type="text"
+                                  value={customPhysioTherapyTherapy}
+                                  onChange={(e) => setCustomPhysioTherapyTherapy(e.target.value)}
+                                  placeholder="e.g. Laser Therapy"
+                                  className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-slate-555 outline-none"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (customPhysioTherapyTherapy.trim()) {
+                                    const val = customPhysioTherapyTherapy.trim();
+                                    if (!physioOptionsTherapy.includes(val)) {
+                                      setPhysioOptionsTherapy(prev => [...prev, val]);
+                                    }
+                                    if (!selectedPhysioTherapiesTherapy.includes(val)) {
+                                      setSelectedPhysioTherapiesTherapy(prev => [...prev, val]);
+                                    }
+                                    setCustomPhysioTherapyTherapy('');
+                                  }
+                                }}
+                                className="px-4 py-2 bg-primary-green text-white rounded-xl text-xs font-bold hover:bg-emerald-600 transition-colors h-[38px] cursor-pointer"
+                              >
+                                Add Option
+                              </button>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -3714,7 +4264,12 @@ function AppointmentsContent() {
                   <div className="px-6 py-4 border-t border-border-gray flex items-center justify-end gap-2.5 shrink-0 bg-white">
                     <button
                       type="button"
-                      onClick={() => setIsTherapyModalOpen(false)}
+                      onClick={() => {
+                        setIsTherapyModalOpen(false);
+                        const prefix = getRolePrefix(user?.role || '');
+                        const dashboardHref = user?.role === 'Superadmin' ? '/superadmin/dashboard' : `${prefix}/dashboard`;
+                        router.push(dashboardHref);
+                      }}
                       className="px-4 py-2 border border-border-gray hover:bg-secondary-bg text-xs text-slate-500 rounded-xl transition-all cursor-pointer font-semibold"
                     >
                       Cancel
@@ -3732,6 +4287,58 @@ function AppointmentsContent() {
             </div>
           )}
         </AnimatePresence>
+        {isEditOptionModalOpen && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/55 backdrop-blur-sm animate-fade-in" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white rounded-2xl p-6 w-full max-w-sm border border-border-gray shadow-xl animate-scale-up" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-sm font-bold text-slate-800 mb-2">Edit Therapy Option</h3>
+              <p className="text-xs text-slate-400 mb-4">Update the name of this routine/therapy below.</p>
+              <input
+                type="text"
+                value={optionEditValue}
+                onChange={(e) => setOptionEditValue(e.target.value)}
+                className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-slate-550 outline-none mb-4"
+                placeholder="Therapy name"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (optionEditValue.trim() && optionEditValue.trim() !== optionToEdit) {
+                      const trimmed = optionEditValue.trim();
+                      setPhysioOptionsTherapy(prev => prev.map(o => o === optionToEdit ? trimmed : o));
+                      setSelectedPhysioTherapiesTherapy(prev => prev.map(o => o === optionToEdit ? trimmed : o));
+                    }
+                    setIsEditOptionModalOpen(false);
+                  } else if (e.key === 'Escape') {
+                    setIsEditOptionModalOpen(false);
+                  }
+                }}
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditOptionModalOpen(false)}
+                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (optionEditValue.trim() && optionEditValue.trim() !== optionToEdit) {
+                      const trimmed = optionEditValue.trim();
+                      setPhysioOptionsTherapy(prev => prev.map(o => o === optionToEdit ? trimmed : o));
+                      setSelectedPhysioTherapiesTherapy(prev => prev.map(o => o === optionToEdit ? trimmed : o));
+                    }
+                    setIsEditOptionModalOpen(false);
+                  }}
+                  className="px-3.5 py-2 bg-primary-green hover:bg-emerald-600 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </DashboardLayout>
     );
   }

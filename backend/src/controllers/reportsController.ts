@@ -32,7 +32,7 @@ export const getDailyReports = async (req: AuthenticatedRequest, res: Response) 
     const rangeEnd = endDate ? `${endDate}T23:59:59.999Z` : new Date().toISOString();
 
     // 1. Fetch filtered users list (the subject of the reports)
-    let userFilterClause = "WHERE is_deleted = false AND role IN ('Reception', 'Telecaller', 'Executive', 'Doctor', 'Dental Doctor', 'OP Technician', 'SOP Technician')";
+    let userFilterClause = "WHERE is_deleted = false AND role IN ('Reception', 'Telecaller', 'Executive', 'Doctor', 'Dental Doctor', 'Dentist Junior', 'Dental Assistant', 'OP Technician', 'SOP Technician')";
     const userParams: any[] = [];
     let userParamIdx = 1;
 
@@ -192,6 +192,8 @@ export const getDailyReports = async (req: AuthenticatedRequest, res: Response) 
       'Executive': [],
       'Doctor': [],
       'Dental Doctor': [],
+      'Dentist Junior': [],
+      'Dental Assistant': [],
       'OP Technician': [],
       'SOP Technician': []
     };
@@ -245,7 +247,7 @@ export const getDailyReports = async (req: AuthenticatedRequest, res: Response) 
           monthlyCount: stats.monthly_count || 0,
           rangeCount: stats.range_count || 0
         };
-      } else if (u.role === 'Dental Doctor') {
+      } else if (u.role === 'Dental Doctor' || u.role === 'Dentist Junior' || u.role === 'Dental Assistant') {
         const stats = denStatsMap[u.id] || {};
         data = {
           ...data,
@@ -319,7 +321,7 @@ export const getDailyReports = async (req: AuthenticatedRequest, res: Response) 
     let activeUsersFilterIdx = 2;
 
     if (role && role !== 'All') {
-      if (role === 'Doctor' || role === 'Dental Doctor') {
+      if (role === 'Doctor' || role === 'Dental Doctor' || role === 'Dentist Junior' || role === 'Dental Assistant') {
         const typeFilter = role === 'Doctor' ? 'doctor' : 'dental';
         appTodayClause += ` AND appointment_type = $${filterIdx}`;
         appMonthClause += ` AND appointment_type = $${filterIdx}`;
@@ -363,7 +365,7 @@ export const getDailyReports = async (req: AuthenticatedRequest, res: Response) 
 
     if (userId && userId !== 'All') {
       const uId = parseInt(userId as string, 10);
-      if (role === 'Doctor' || role === 'Dental Doctor') {
+      if (role === 'Doctor' || role === 'Dental Doctor' || role === 'Dentist Junior' || role === 'Dental Assistant') {
         appTodayClause += ` AND doctor_id = $${filterIdx}`;
         appMonthClause += ` AND doctor_id = $${filterIdx}`;
         appTodayParams.push(uId);

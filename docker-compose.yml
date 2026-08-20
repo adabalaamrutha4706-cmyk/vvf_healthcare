@@ -1,0 +1,72 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: vvf-postgres
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=lms_password
+      - POSTGRES_DB=vvf_healthcare
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d vvf_healthcare"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: dev
+    container_name: vvf-backend
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      - PORT=5000
+      - DATABASE_URL=postgresql://postgres:lms_password@postgres:5432/vvf_healthcare
+      - JWT_SECRET=super_secret_vvf_healthcare_jwt_token_key_12345
+      - JWT_EXPIRES_IN=7d
+      - UPLOAD_DIR=uploads
+      - MAX_FILE_SIZE_MB=5
+      - ALLOWED_FILE_TYPES=image/jpeg,image/png,image/webp
+      - USE_LOCAL_DB=false
+      - MIN_VISIT_DURATION_MINS=10
+      - ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000
+    volumes:
+      - ./backend:/usr/src/app
+      - /usr/src/app/node_modules
+      - uploads_data:/usr/src/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: dev
+      args:
+        - NEXT_PUBLIC_BACKEND_URL=http://localhost:5000
+    container_name: vvf-frontend
+    restart: always
+    ports:
+      - "5173:5173"
+    environment:
+      - PORT=5173
+      - HOSTNAME=0.0.0.0
+      - NEXT_PUBLIC_BACKEND_URL=http://localhost:5000
+    volumes:
+      - ./frontend:/usr/src/app
+      - /usr/src/app/node_modules
+      - /usr/src/app/.next
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  uploads_data:

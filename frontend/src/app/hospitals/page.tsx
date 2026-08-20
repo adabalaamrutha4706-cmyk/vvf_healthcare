@@ -7,10 +7,12 @@ import { api } from '../../lib/api';
 import { 
   Building2, Search, Plus, Edit3, Trash2, ShieldAlert, CheckCircle, 
   MapPin, Phone, User, Sparkles, X, Activity, Globe, Clock, Users,
-  CheckSquare, Check, Compass, Shield, Eye, Calendar, AlertTriangle
+  CheckSquare, Check, Compass, Shield, Eye, Calendar, AlertTriangle, Home, Handshake
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SelectField } from '../../components/SelectField';
+import { ReportFilterPanel } from '../../components/ReportFilterPanel';
+import { exportToPDF, exportToExcel } from '../../lib/exportUtils';
 
 export default function HospitalsPage() {
   const { user } = useAuth();
@@ -20,6 +22,9 @@ export default function HospitalsPage() {
   
   // Search & Filter
   const [search, setSearch] = useState('');
+  const [clinicCategoryTab, setClinicCategoryTab] = useState<'all' | 'In-House Hospital' | 'Hospital'>('all');
+  const [reportStartDate, setReportStartDate] = useState('');
+  const [reportEndDate, setReportEndDate] = useState('');
   
   // States
   const [loading, setLoading] = useState(true);
@@ -41,7 +46,9 @@ export default function HospitalsPage() {
   const [pincode, setPincode] = useState('');
   const [googleMapsLink, setGoogleMapsLink] = useState('');
   const [allowedRadius, setAllowedRadius] = useState('200');
-  const [hospitalType, setHospitalType] = useState('Clinic');
+  const [hospitalType, setHospitalType] = useState('Hospital');
+  const [clinicCategory, setClinicCategory] = useState('Hospital');
+  const [parentHospitalId, setParentHospitalId] = useState<number | ''>('');
   const [branchCode, setBranchCode] = useState('');
   const [visitingHoursStart, setVisitingHoursStart] = useState('');
   const [visitingHoursEnd, setVisitingHoursEnd] = useState('');
@@ -132,7 +139,7 @@ export default function HospitalsPage() {
       });
       setHospitals(uniqueHospitals);
     } catch (e: any) {
-      setError(e.message || 'Failed to fetch partner clinic networks.');
+      setError(e.message || 'Failed to fetch partner hospital networks.');
     } finally {
       setLoading(false);
     }
@@ -151,17 +158,17 @@ export default function HospitalsPage() {
   useEffect(() => {
     const errs: Record<string, string> = {};
 
-    // Clinic Name
+    // Hospital Name
     const nameTrim = name.trim();
     if (nameTrim) {
       if (nameTrim.length < 3 || nameTrim.length > 100) {
-        errs.name = 'Clinic name must be between 3 and 100 characters.';
+        errs.name = 'Hospital name must be between 3 and 100 characters.';
       } else if (!/^[a-zA-Z0-9\s\-&\.]+$/.test(nameTrim)) {
         errs.name = 'Only letters, numbers, spaces, hyphens, ampersands, and full stops allowed.';
       } else if (/^\d+$/.test(nameTrim)) {
-        errs.name = 'Clinic name cannot contain only numbers.';
+        errs.name = 'Hospital name cannot contain only numbers.';
       } else if (nameTrim.split('.').length > 2) {
-        errs.name = 'At most one full stop is allowed in the clinic name.';
+        errs.name = 'At most one full stop is allowed in the hospital name.';
       }
     }
 
@@ -295,7 +302,9 @@ export default function HospitalsPage() {
     setPincode('');
     setGoogleMapsLink('');
     setAllowedRadius('200');
-    setHospitalType('Clinic');
+    setHospitalType('Hospital');
+    setClinicCategory('Hospital');
+    setParentHospitalId('');
     setBranchCode('');
     setVisitingHoursStart('');
     setVisitingHoursEnd('');
@@ -360,7 +369,9 @@ export default function HospitalsPage() {
     setPincode(hosp.pincode || '');
     setGoogleMapsLink(hosp.google_maps_link || '');
     setAllowedRadius(hosp.allowed_radius !== null && hosp.allowed_radius !== undefined ? hosp.allowed_radius.toString() : '200');
-    setHospitalType(hosp.hospital_type || 'Clinic');
+    setHospitalType(hosp.hospital_type || 'Hospital');
+    setClinicCategory(hosp.clinic_category || 'Hospital');
+    setParentHospitalId(hosp.parent_hospital_id || '');
     setBranchCode(hosp.branch_code || '');
     
     // Parse visiting hours
@@ -408,6 +419,54 @@ export default function HospitalsPage() {
     setError('');
     setSuccess('');
     setIsFormOpen(true);
+  };
+
+  const handleClinicCategoryChange = (val: string) => {
+    setClinicCategory(val);
+    if (val !== 'In-House Hospital') {
+      setParentHospitalId('');
+      setAddress('');
+      setCity('');
+      setState('Telangana');
+      setPincode('');
+      setGoogleMapsLink('');
+      setPreviewLat(null);
+      setPreviewLng(null);
+      setPreviewStatus('');
+    }
+  };
+
+  const handleParentHospitalChange = (val: string) => {
+    const parentId = val ? parseInt(val, 10) : '';
+    setParentHospitalId(parentId);
+    if (parentId) {
+      const parent = hospitals.find(h => h.id === parentId);
+      if (parent) {
+        setAddress(parent.address || '');
+        setCity(parent.city || '');
+        setState(parent.state || 'Telangana');
+        setPincode(parent.pincode || '');
+        setGoogleMapsLink(parent.google_maps_link || '');
+        setPreviewLat(parent.latitude);
+        setPreviewLng(parent.longitude);
+        setAllowedRadius(parent.allowed_radius !== null && parent.allowed_radius !== undefined ? parent.allowed_radius.toString() : '200');
+        setGeofencingEnabled(parent.geofencing_enabled !== undefined ? parent.geofencing_enabled : true);
+        setRequireGpsValidation(parent.require_gps_validation !== undefined ? parent.require_gps_validation : true);
+        setRequireLivePhoto(parent.require_live_photo !== undefined ? parent.require_live_photo : false);
+        setRequireCheckout(parent.require_checkout !== undefined ? parent.require_checkout : true);
+        setAllowRemoteCompletion(parent.allow_remote_completion !== undefined ? parent.allow_remote_completion : true);
+        setPreviewStatus(parent.geo_verification_status || 'VERIFIED');
+      }
+    } else {
+      setAddress('');
+      setCity('');
+      setState('Telangana');
+      setPincode('');
+      setGoogleMapsLink('');
+      setPreviewLat(null);
+      setPreviewLng(null);
+      setPreviewStatus('');
+    }
   };
 
   const handleVerifyLocation = async () => {
@@ -497,6 +556,8 @@ export default function HospitalsPage() {
       latitude: previewLat,
       longitude: previewLng,
       hospital_type: hospitalType,
+      clinic_category: clinicCategory,
+      parent_hospital_id: parentHospitalId || null,
       branch_code: branchCode,
       visiting_hours: visitingHours,
       visiting_hours_start: visitingHoursStart,
@@ -553,20 +614,87 @@ export default function HospitalsPage() {
     }
   };
 
-  const filteredHospitals = hospitals.filter(h => 
-    h.name.toLowerCase().includes(search.toLowerCase()) ||
-    h.city.toLowerCase().includes(search.toLowerCase()) ||
-    h.state.toLowerCase().includes(search.toLowerCase()) ||
-    (h.hospital_uid && h.hospital_uid.toLowerCase().includes(search.toLowerCase())) ||
-    (h.legacy_hospital_id && h.legacy_hospital_id.toLowerCase().includes(search.toLowerCase())) ||
-    (h.legacyHospitalId && h.legacyHospitalId.toLowerCase().includes(search.toLowerCase()))
-  );
+  const filteredHospitals = hospitals.filter(h => {
+    const q = search.trim().toLowerCase();
+    const matchesSearch = !q || (
+      (h.name && h.name.toLowerCase().includes(q)) ||
+      (h.city && h.city.toLowerCase().includes(q)) ||
+      (h.state && h.state.toLowerCase().includes(q)) ||
+      (h.hospital_uid && h.hospital_uid.toLowerCase().includes(q)) ||
+      (h.legacy_hospital_id && h.legacy_hospital_id.toLowerCase().includes(q)) ||
+      (h.legacyHospitalId && h.legacyHospitalId.toLowerCase().includes(q)) ||
+      (h.phone && String(h.phone).includes(q))
+    );
+    const matchesTab = clinicCategoryTab === 'all' || (h.clinic_category || 'Hospital') === clinicCategoryTab;
+
+    let matchesDate = true;
+    if (reportStartDate && reportEndDate) {
+      const dateVal = h.created_at;
+      if (dateVal) {
+        const hDate = new Date(dateVal).setHours(0, 0, 0, 0);
+        const start = new Date(reportStartDate).setHours(0, 0, 0, 0);
+        const end = new Date(reportEndDate).setHours(23, 59, 59, 999);
+        if (hDate < start || hDate > end) {
+          matchesDate = false;
+        }
+      }
+    }
+
+    return matchesSearch && matchesTab && matchesDate;
+  });
+
+  const handleDownloadPDF = () => {
+    const headers = ['#', 'Hospital Name', 'Category', 'City', 'State', 'Contact Person', 'Phone', 'Geofence Radius', 'Status'];
+    const body = filteredHospitals.map((h, idx) => [
+      String(idx + 1),
+      h.name || 'N/A',
+      h.clinic_category || 'Hospital',
+      h.city || 'N/A',
+      h.state || 'N/A',
+      h.contact_person || 'N/A',
+      h.phone || 'N/A',
+      `${h.allowed_radius || 200}m`,
+      h.status || 'ACTIVE'
+    ]);
+
+    const subtitle = `Date Range: ${reportStartDate || 'All Time'} to ${reportEndDate || 'Present'} | Category: ${clinicCategoryTab === 'all' ? 'All Categories' : clinicCategoryTab}`;
+    exportToPDF(headers, body, 'VVF Healthcare - Hospitals Directory & Branch Registry Report', subtitle, `hospitals_registry_report_${new Date().toISOString().split('T')[0]}`);
+  };
+
+  const handleDownloadExcel = () => {
+    const excelData = filteredHospitals.map((h, idx) => ({
+      'S.No': idx + 1,
+      'Hospital Name': h.name || '',
+      'UID / Branch Code': h.hospital_uid || h.branch_code || '',
+      'Clinic Category': h.clinic_category || 'Hospital',
+      'Contact Person': h.contact_person || '',
+      'Phone': h.phone || '',
+      'City': h.city || '',
+      'State': h.state || '',
+      'Pincode': h.pincode || '',
+      'Landmark': h.landmark || '',
+      'Geofence Radius (m)': h.allowed_radius || 200,
+      'Status': h.status || 'ACTIVE',
+      'Created Date': h.created_at ? new Date(h.created_at).toLocaleDateString('en-IN') : ''
+    }));
+
+    exportToExcel(excelData, `hospitals_registry_report_${new Date().toISOString().split('T')[0]}`, {
+      title: 'VVF Healthcare - Hospitals Registry & Branch Report',
+      filters: {
+        'Category Tab': clinicCategoryTab === 'all' ? 'All' : clinicCategoryTab,
+        'Start Date': reportStartDate || 'All Time',
+        'End Date': reportEndDate || 'Present',
+        'Total Exported Records': String(filteredHospitals.length)
+      }
+    });
+  };
+
+  const inHouseCount = hospitals.filter(h => (h.clinic_category || 'Hospital') === 'In-House Hospital').length;
+  const partnerCount = hospitals.filter(h => (h.clinic_category || 'Hospital') === 'Hospital').length;
 
   const isFormInvalid = 
     !name.trim() || 
-    !city.trim() || 
-    !state.trim() || 
-    !address.trim() || 
+    (clinicCategory === 'In-House Hospital' ? !parentHospitalId : (!city.trim() || !state.trim() || !address.trim())) || 
     Object.keys(formErrors).length > 0;
 
   return (
@@ -577,7 +705,7 @@ export default function HospitalsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-lg sm:text-2xl font-bold text-slate-500 flex items-center gap-2">
-              Partner Hospitals Registry
+              Hospitals Registry
               <Building2 className="h-5 w-5 text-primary-green" />
             </h1>
             <p className="text-sm text-slate-500 mt-0.5">
@@ -585,7 +713,7 @@ export default function HospitalsPage() {
             </p>
           </div>
 
-          {user?.role === 'Admin' && (
+          {(user?.role === 'Admin' || user?.role === 'Superadmin') && (
             <button
               id="btn-new-hospital"
               onClick={handleOpenCreate}
@@ -611,19 +739,62 @@ export default function HospitalsPage() {
           </div>
         )}
 
-        {/* Search Panel */}
-        <div className="bg-white border border-border-gray p-3 sm:p-4 rounded-xl sm:rounded-2xl">
-          <div className="relative">
-            <Search className="absolute left-3 top-3 h-4.5 w-4.5 text-slate-500" />
-            <input
-              id="hospital-search"
-              type="text"
-              placeholder="Search hospitals by name, UID, city, or state..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2.5 pl-10 pr-4 text-xs text-slate-500 placeholder-slate-400 outline-none transition-all"
-            />
-          </div>
+        {/* Report Filter & Export Panel */}
+        <ReportFilterPanel
+          onGenerate={(start, end) => {
+            setReportStartDate(start);
+            setReportEndDate(end);
+          }}
+          onReset={() => {
+            setReportStartDate('');
+            setReportEndDate('');
+            setClinicCategoryTab('all');
+            setSearch('');
+          }}
+          isLoading={loading}
+          totalRecords={filteredHospitals.length}
+          activeStartDate={reportStartDate}
+          activeEndDate={reportEndDate}
+          onDownloadPDF={handleDownloadPDF}
+          onDownloadExcel={handleDownloadExcel}
+          showSearch={true}
+          searchValue={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search hospitals by name, UID, city, state, or phone..."
+        />
+
+        {/* Clinic Category Tabs */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          {[
+            { key: 'all' as const, label: 'All Hospitals', count: hospitals.length, icon: Building2 },
+            { key: 'In-House Hospital' as const, label: 'In-House Hospitals', count: inHouseCount, icon: Home },
+            { key: 'Hospital' as const, label: 'Hospitals', count: partnerCount, icon: Handshake },
+          ].map((tab) => {
+            const isActive = clinicCategoryTab === tab.key;
+            const TabIcon = tab.icon;
+            return (
+              <button
+                key={tab.key}
+                id={`tab-${tab.key.replace(/\s+/g, '-').toLowerCase()}`}
+                onClick={() => setClinicCategoryTab(tab.key)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 cursor-pointer whitespace-nowrap ${
+                  isActive
+                    ? 'bg-primary-green text-white shadow-md shadow-emerald-950/20'
+                    : 'bg-white text-slate-500 border border-border-gray hover:border-light-green hover:text-primary-green'
+                }`}
+              >
+                <TabIcon className="h-3.5 w-3.5" />
+                {tab.label}
+                <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                  isActive
+                    ? 'bg-white/20 text-white'
+                    : 'bg-secondary-bg text-slate-500'
+                }`}>
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Grid List */}
@@ -669,9 +840,18 @@ export default function HospitalsPage() {
                       <h3 className="font-bold text-slate-500 text-sm leading-snug group-hover:text-primary-green transition-colors mt-1">
                         {hosp.name}
                       </h3>
-                      <p className="text-[10px] text-slate-500 mt-0.5">
-                        {hosp.hospital_type || 'Clinic'}
-                      </p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <p className="text-[10px] text-slate-500">
+                          {hosp.hospital_type || 'Hospital'}
+                        </p>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold border ${
+                          (hosp.clinic_category || 'Hospital') === 'In-House Hospital'
+                            ? 'bg-blue-50 text-blue-700 border-blue-200'
+                            : 'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>
+                          {(hosp.clinic_category || 'Hospital') === 'In-House Hospital' ? '🏠 In-House' : '🤝 Hospital'}
+                        </span>
+                      </div>
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0">
                       <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
@@ -814,7 +994,7 @@ export default function HospitalsPage() {
                 </div>
 
                 {/* Actions Bar */}
-                {user?.role === 'Admin' && (
+                {(user?.role === 'Admin' || user?.role === 'Superadmin') && (
                   <div className="flex justify-end items-center border-t border-border-gray pt-3 gap-2.5">
                     <button
                       id={`btn-edit-hospital-${hosp.id}`}
@@ -860,7 +1040,7 @@ export default function HospitalsPage() {
                 <div className="px-6 py-4 border-b border-border-gray flex items-center justify-between shrink-0">
                   <h3 className="font-bold text-sm text-slate-500 flex items-center gap-1.5">
                     <Sparkles className="h-4.5 w-4.5 text-primary-green" />
-                    {selectedHospital ? `Edit Branch (${selectedHospital.hospital_uid})` : 'Register Partner Clinic'}
+                    {selectedHospital ? `Edit Branch (${selectedHospital.hospital_uid})` : 'Register Hospital'}
                   </h3>
                   <button id="close-hospital-modal" onClick={() => setIsFormOpen(false)} className="text-slate-500 hover:text-primary-green cursor-pointer">
                     <X className="h-4.5 w-4.5" />
@@ -879,15 +1059,16 @@ export default function HospitalsPage() {
                       
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Clinic Name *</label>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Hospital Name *</label>
                           <input
                             id="form-hosp-name"
                             type="text"
                             required
+                            maxLength={100}
                             value={name}
                             onChange={(e) => { setName(e.target.value); markTouched('name'); }}
                             onBlur={() => markTouched('name')}
-                            placeholder="Apex Heart Clinic"
+                            placeholder="Apex Heart Hospital"
                             className={getInputClass('name', name)}
                           />
                           {touchedFields.name && formErrors.name && (
@@ -900,6 +1081,7 @@ export default function HospitalsPage() {
                           <input
                             id="form-hosp-branch-code"
                             type="text"
+                            maxLength={50}
                             value={branchCode}
                             onChange={(e) => { setBranchCode(e.target.value); markTouched('branch_code'); }}
                             onBlur={() => markTouched('branch_code')}
@@ -916,6 +1098,7 @@ export default function HospitalsPage() {
                           <input
                             id="form-hosp-legacy-id"
                             type="text"
+                            maxLength={100}
                             value={legacyHospitalId}
                             onChange={(e) => setLegacyHospitalId(e.target.value)}
                             placeholder="e.g. HSP-2026-000012"
@@ -924,7 +1107,21 @@ export default function HospitalsPage() {
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Hospital Category *</label>
+                          <SelectField
+                            id="form-hosp-clinic-category"
+                            value={clinicCategory}
+                            onChange={handleClinicCategoryChange}
+                            triggerClassName="py-2 px-3 text-xs"
+                            options={[
+                              { value: 'In-House Hospital', label: '🏠 In-House Hospital' },
+                              { value: 'Hospital', label: '🤝 Hospital' },
+                            ]}
+                          />
+                        </div>
+
                         <div>
                           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Hospital Type</label>
                           <SelectField
@@ -975,6 +1172,24 @@ export default function HospitalsPage() {
                         </div>
                       </div>
 
+                      {clinicCategory === 'In-House Hospital' && (
+                        <div className="mt-4">
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Parent Hospital *</label>
+                          <SelectField
+                            id="form-hosp-parent-id"
+                            value={parentHospitalId ? parentHospitalId.toString() : ''}
+                            onChange={handleParentHospitalChange}
+                            triggerClassName="py-2 px-3 text-xs"
+                            options={[
+                              { value: '', label: 'Select Parent Hospital...' },
+                              ...hospitals
+                                .filter(h => h.id !== selectedHospital?.id && h.status?.toUpperCase() === 'ACTIVE' && h.clinic_category !== 'In-House Hospital')
+                                .map(h => ({ value: h.id.toString(), label: `🏥 ${h.name} (${h.city})` }))
+                            ]}
+                          />
+                        </div>
+                      )}
+
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Visiting Hours Start Time</label>
@@ -1010,6 +1225,7 @@ export default function HospitalsPage() {
                           <input
                             id="form-hosp-zone"
                             type="text"
+                            maxLength={100}
                             value={territoryZone}
                             onChange={(e) => { setTerritoryZone(e.target.value); markTouched('territory_zone'); }}
                             onBlur={() => markTouched('territory_zone')}
@@ -1021,335 +1237,367 @@ export default function HospitalsPage() {
                           )}
                         </div>
                       </div>
-                    </div>
-
-                    {/* Section 2: Location & Geo-Verification settings */}
+                                 {/* Section 2: Location & Geo-Verification settings */}
                     <div className="space-y-4">
                       <h4 className="text-xs font-bold text-primary-green flex items-center gap-1.5 uppercase tracking-wider pb-1 border-b border-border-gray">
                         <MapPin className="h-4 w-4" />
                         2. Location & Geo-Verification
                       </h4>
 
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Full Address</label>
-                        <textarea
-                          id="form-hosp-address"
-                          value={address}
-                          onChange={(e) => { setAddress(e.target.value); markTouched('address'); }}
-                          onBlur={() => markTouched('address')}
-                          placeholder="Plot 42, Jubilee Hills Road No 36"
-                          rows={2}
-                          className={getInputClass('address', address) + " resize-none"}
-                        />
-                        {touchedFields.address && formErrors.address && (
-                          <p className="text-[10px] text-alert-text mt-1 font-semibold">{formErrors.address}</p>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">City *</label>
-                          <input
-                            id="form-hosp-city"
-                            type="text"
-                            required
-                            value={city}
-                            onChange={(e) => { setCity(e.target.value); markTouched('city'); }}
-                            onBlur={() => markTouched('city')}
-                            placeholder="Secunderabad"
-                            className={getInputClass('city', city)}
-                          />
-                          {touchedFields.city && formErrors.city && (
-                            <p className="text-[10px] text-alert-text mt-1 font-semibold">{formErrors.city}</p>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">State *</label>
-                          <input
-                            id="form-hosp-state"
-                            type="text"
-                            required
-                            value={state}
-                            onChange={(e) => { setState(e.target.value); markTouched('state'); }}
-                            onBlur={() => markTouched('state')}
-                            placeholder="Telangana"
-                            className={getInputClass('state', state)}
-                          />
-                          {touchedFields.state && formErrors.state && (
-                            <p className="text-[10px] text-alert-text mt-1 font-semibold">{formErrors.state}</p>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Pincode</label>
-                          <input
-                            id="form-hosp-pincode"
-                            type="text"
-                            value={pincode}
-                            onChange={(e) => { setPincode(e.target.value); markTouched('pincode'); }}
-                            onBlur={() => markTouched('pincode')}
-                            placeholder="500003"
-                            className={getInputClass('pincode', pincode)}
-                          />
-                          {touchedFields.pincode && formErrors.pincode && (
-                            <p className="text-[10px] text-alert-text mt-1 font-semibold">{formErrors.pincode}</p>
-                          )}
-                        </div>
-                      </div>                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Landmark</label>
-                          <input
-                            id="form-hosp-landmark"
-                            type="text"
-                            value={landmark}
-                            onChange={(e) => { setLandmark(e.target.value); markTouched('landmark'); }}
-                            onBlur={() => markTouched('landmark')}
-                            placeholder="Opposite Metro Pillar 1600"
-                            className={getInputClass('landmark', landmark)}
-                          />
-                          {touchedFields.landmark && formErrors.landmark && (
-                            <p className="text-[10px] text-alert-text mt-1 font-semibold">{formErrors.landmark}</p>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Google Maps Link</label>
-                          <input
-                            id="form-hosp-maps-link"
-                            type="url"
-                            value={googleMapsLink}
-                            onChange={(e) => { setGoogleMapsLink(e.target.value); markTouched('google_maps_link'); }}
-                            onBlur={() => markTouched('google_maps_link')}
-                            placeholder="https://maps.google.com/..."
-                            className={getInputClass('google_maps_link', googleMapsLink)}
-                          />
-                          {touchedFields.google_maps_link && formErrors.google_maps_link && (
-                            <p className="text-[10px] text-alert-text mt-1 font-semibold">{formErrors.google_maps_link}</p>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Manual Coordinates Input Fields */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Latitude</label>
-                          <input
-                            id="form-hosp-latitude"
-                            type="text"
-                            value={inputLat}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setInputLat(val);
-                              const parsed = parseFloat(val);
-                              if (!isNaN(parsed) && parsed >= -90 && parsed <= 90) {
-                                setPreviewLat(parsed);
-                              } else if (val === '') {
-                                setPreviewLat(null);
-                              }
-                            }}
-                            placeholder="e.g. 17.3850"
-                            className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-slate-500 placeholder-slate-400 outline-none transition-all"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Longitude</label>
-                          <input
-                            id="form-hosp-longitude"
-                            type="text"
-                            value={inputLng}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setInputLng(val);
-                              const parsed = parseFloat(val);
-                              if (!isNaN(parsed) && parsed >= -180 && parsed <= 180) {
-                                setPreviewLng(parsed);
-                              } else if (val === '') {
-                                setPreviewLng(null);
-                              }
-                            }}
-                            placeholder="e.g. 78.4860"
-                            className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-slate-500 placeholder-slate-400 outline-none transition-all"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Verify Button and Radius */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Allowed Radius (meters)</label>
-                          <input
-                            id="form-hosp-radius"
-                            type="number"
-                            value={allowedRadius}
-                            onChange={(e) => { setAllowedRadius(e.target.value); markTouched('allowed_radius'); }}
-                            onBlur={() => markTouched('allowed_radius')}
-                            placeholder="200"
-                            className={getInputClass('allowed_radius', allowedRadius)}
-                          />
-                          {touchedFields.allowed_radius && formErrors.allowed_radius && (
-                            <p className="text-[10px] text-alert-text mt-1 font-semibold">{formErrors.allowed_radius}</p>
-                          )}
-                        </div>
-                        <div>
-                          <button
-                            id="btn-verify-location"
-                            type="button"
-                            onClick={handleVerifyLocation}
-                            disabled={isVerifyingCoords}
-                            className="w-full flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold text-primary-green bg-very-light-green hover:bg-very-light-green/60 border border-emerald-500/30 rounded-xl cursor-pointer transition-all disabled:opacity-50"
-                          >
-                            <Compass className={`h-4 w-4 ${isVerifyingCoords ? 'animate-spin' : ''}`} />
-                            {isVerifyingCoords ? 'Resolving Coordinates...' : 'Verify Location'}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Location Preview Panel */}
-                      {(previewLat !== null || previewError || previewWarning) && (
-                        <div className="bg-white/80 border border-border-gray rounded-xl p-4 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <h5 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Location Verification Status</h5>
-                            {previewStatus && (
-                              <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${
-                                previewStatus === 'VERIFIED' ? 'bg-very-light-green text-primary-green border-light-green/40' :
-                                previewStatus === 'APPROXIMATE' ? 'bg-secondary-bg text-slate-500 border-border-gray' :
-                                'bg-alert-bg text-alert-text border-alert-border'
-                              }`}>
-                                {previewStatus}
-                              </span>
+                      {clinicCategory === 'In-House Hospital' ? (
+                        <div className="bg-light-green/20 border border-light-green/45 rounded-xl p-4 flex items-start gap-3">
+                          <CheckCircle className="h-5 w-5 text-primary-green shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-xs font-bold text-slate-700">Location Settings Synced</p>
+                            <p className="text-[11px] text-slate-500 mt-1 leading-normal">
+                              This is an In-House Hospital. Address, Coordinates, and Geofencing boundaries are automatically synced from the selected Parent Hospital:
+                            </p>
+                            {parentHospitalId ? (
+                              <div className="mt-2 text-[11px] bg-white border border-border-gray p-2.5 rounded-lg text-slate-600 space-y-1">
+                                <p className="font-semibold text-slate-700">
+                                  {hospitals.find(h => h.id === parentHospitalId)?.name || 'Parent Hospital'}
+                                </p>
+                                <p className="text-slate-500">
+                                  📍 {address || 'No address set'}
+                                </p>
+                                <p className="text-[10px] text-slate-400">
+                                  GPS: {previewLat || 'N/A'}, {previewLng || 'N/A'} (Radius: {allowedRadius}m)
+                                </p>
+                              </div>
+                            ) : (
+                              <p className="text-[11px] text-rose-600 font-semibold mt-1">⚠️ Please select a Parent Hospital above to retrieve location credentials.</p>
                             )}
                           </div>
-
-                          {previewError && (
-                            <p className="text-xs text-alert-text font-medium flex items-center gap-1.5">
-                              <ShieldAlert className="h-4 w-4 shrink-0" />
-                              {previewError}
-                            </p>
-                          )}
-
-                          {previewWarning && (
-                            <div className="p-2.5 rounded-lg bg-secondary-bg/20 border border-amber-500/10 text-[10px] text-slate-500 flex items-start gap-1.5">
-                              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                              <span className="font-medium leading-normal">{previewWarning}</span>
+                        </div>
+                      ) : (
+                        <>
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Full Address</label>
+                            <textarea
+                              id="form-hosp-address"
+                              value={address}
+                              onChange={(e) => { setAddress(e.target.value); markTouched('address'); }}
+                              onBlur={() => markTouched('address')}
+                              placeholder="Plot 42, Jubilee Hills Road No 36"
+                              rows={2}
+                              className={getInputClass('address', address) + " resize-none"}
+                            />
+                            {touchedFields.address && formErrors.address && (
+                              <p className="text-[10px] text-alert-text mt-1 font-semibold">{formErrors.address}</p>
+                            )}
+                                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">City *</label>
+                              <input
+                                id="form-hosp-city"
+                                type="text"
+                                required
+                                maxLength={100}
+                                value={city}
+                                onChange={(e) => { setCity(e.target.value); markTouched('city'); }}
+                                onBlur={() => markTouched('city')}
+                                placeholder="Secunderabad"
+                                className={getInputClass('city', city)}
+                              />
+                              {touchedFields.city && formErrors.city && (
+                                <p className="text-[10px] text-alert-text mt-1 font-semibold">{formErrors.city}</p>
+                              )}
                             </div>
-                          )}
 
-                          {previewLat !== null && previewLng !== null && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {/* Resolved coordinates info */}
-                              <div className="space-y-2 text-xs">
-                                <div className="bg-white border border-border-gray p-2.5 rounded-lg space-y-1">
-                                  <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Resolved Coordinates</span>
-                                  <div className="font-mono text-slate-500 flex flex-col">
-                                    <span>Latitude: {previewLat.toFixed(6)}</span>
-                                    <span>Longitude: {previewLng.toFixed(6)}</span>
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">State *</label>
+                              <input
+                                id="form-hosp-state"
+                                type="text"
+                                required
+                                maxLength={100}
+                                value={state}
+                                onChange={(e) => { setState(e.target.value); markTouched('state'); }}
+                                onBlur={() => markTouched('state')}
+                                placeholder="Telangana"
+                                className={getInputClass('state', state)}
+                              />
+                              {touchedFields.state && formErrors.state && (
+                                <p className="text-[10px] text-alert-text mt-1 font-semibold">{formErrors.state}</p>
+                              )}
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Pincode</label>
+                              <input
+                                id="form-hosp-pincode"
+                                type="text"
+                                maxLength={6}
+                                value={pincode}
+                                onChange={(e) => { setPincode(e.target.value); markTouched('pincode'); }}
+                                onBlur={() => markTouched('pincode')}
+                                placeholder="500003"
+                                className={getInputClass('pincode', pincode)}
+                              />
+                              {touchedFields.pincode && formErrors.pincode && (
+                                <p className="text-[10px] text-alert-text mt-1 font-semibold">{formErrors.pincode}</p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Landmark</label>
+                              <input
+                                id="form-hosp-landmark"
+                                type="text"
+                                maxLength={255}
+                                value={landmark}
+                                onChange={(e) => { setLandmark(e.target.value); markTouched('landmark'); }}
+                                onBlur={() => markTouched('landmark')}
+                                placeholder="Opposite Metro Pillar 1600"
+                                className={getInputClass('landmark', landmark)}
+                              />
+                              {touchedFields.landmark && formErrors.landmark && (
+                                <p className="text-[10px] text-alert-text mt-1 font-semibold">{formErrors.landmark}</p>
+                              )}
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Google Maps Link</label>
+                              <input
+                                id="form-hosp-maps-link"
+                                type="url"
+                                maxLength={500}
+                                value={googleMapsLink}
+                                onChange={(e) => { setGoogleMapsLink(e.target.value); markTouched('google_maps_link'); }}
+                                onBlur={() => markTouched('google_maps_link')}
+                                placeholder="https://maps.google.com/..."
+                                className={getInputClass('google_maps_link', googleMapsLink)}
+                              />
+                              {touchedFields.google_maps_link && formErrors.google_maps_link && (
+                                <p className="text-[10px] text-alert-text mt-1 font-semibold">{formErrors.google_maps_link}</p>
+                              )}
+                            </div>
+                          </div>                  </div>
+
+                          {/* Manual Coordinates Input Fields */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Latitude</label>
+                              <input
+                                id="form-hosp-latitude"
+                                type="text"
+                                value={inputLat}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setInputLat(val);
+                                  const parsed = parseFloat(val);
+                                  if (!isNaN(parsed) && parsed >= -90 && parsed <= 90) {
+                                    setPreviewLat(parsed);
+                                  } else if (val === '') {
+                                    setPreviewLat(null);
+                                  }
+                                }}
+                                placeholder="e.g. 17.3850"
+                                className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-slate-500 placeholder-slate-400 outline-none transition-all"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Longitude</label>
+                              <input
+                                id="form-hosp-longitude"
+                                type="text"
+                                value={inputLng}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setInputLng(val);
+                                  const parsed = parseFloat(val);
+                                  if (!isNaN(parsed) && parsed >= -180 && parsed <= 180) {
+                                    setPreviewLng(parsed);
+                                  } else if (val === '') {
+                                    setPreviewLng(null);
+                                  }
+                                }}
+                                placeholder="e.g. 78.4860"
+                                className="w-full bg-white border border-border-gray focus:border-primary-green focus:ring-1 focus:ring-light-green rounded-xl py-2 px-3 text-xs text-slate-500 placeholder-slate-400 outline-none transition-all"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Verify Button and Radius */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                            <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Allowed Radius (meters)</label>
+                              <input
+                                id="form-hosp-radius"
+                                type="number"
+                                value={allowedRadius}
+                                onChange={(e) => { setAllowedRadius(e.target.value); markTouched('allowed_radius'); }}
+                                onBlur={() => markTouched('allowed_radius')}
+                                placeholder="200"
+                                className={getInputClass('allowed_radius', allowedRadius)}
+                              />
+                              {touchedFields.allowed_radius && formErrors.allowed_radius && (
+                                <p className="text-[10px] text-alert-text mt-1 font-semibold">{formErrors.allowed_radius}</p>
+                              )}
+                            </div>
+                            <div>
+                              <button
+                                id="btn-verify-location"
+                                type="button"
+                                onClick={handleVerifyLocation}
+                                disabled={isVerifyingCoords}
+                                className="w-full flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold text-primary-green bg-very-light-green hover:bg-very-light-green/60 border border-emerald-500/30 rounded-xl cursor-pointer transition-all disabled:opacity-50"
+                              >
+                                <Compass className={`h-4 w-4 ${isVerifyingCoords ? 'animate-spin' : ''}`} />
+                                {isVerifyingCoords ? 'Resolving Coordinates...' : 'Verify Location'}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Location Preview Panel */}
+                          {(previewLat !== null || previewError || previewWarning) && (
+                            <div className="bg-white/80 border border-border-gray rounded-xl p-4 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <h5 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Location Verification Status</h5>
+                                {previewStatus && (
+                                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${
+                                    previewStatus === 'VERIFIED' ? 'bg-very-light-green text-primary-green border-light-green/40' :
+                                    previewStatus === 'APPROXIMATE' ? 'bg-secondary-bg text-slate-500 border-border-gray' :
+                                    'bg-alert-bg text-alert-text border-alert-border'
+                                  }`}>
+                                    {previewStatus}
+                                  </span>
+                                )}
+                              </div>
+
+                              {previewError && (
+                                <p className="text-xs text-alert-text font-medium flex items-center gap-1.5">
+                                  <ShieldAlert className="h-4 w-4 shrink-0" />
+                                  {previewError}
+                                </p>
+                              )}
+
+                              {previewWarning && (
+                                <div className="p-2.5 rounded-lg bg-secondary-bg/20 border border-amber-500/10 text-[10px] text-slate-500 flex items-start gap-1.5">
+                                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                                  <span className="font-medium leading-normal">{previewWarning}</span>
+                                </div>
+                              )}
+
+                              {previewLat !== null && previewLng !== null && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  {/* Resolved coordinates info */}
+                                  <div className="space-y-2 text-xs">
+                                    <div className="bg-white border border-border-gray p-2.5 rounded-lg space-y-1">
+                                      <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Resolved Coordinates</span>
+                                      <div className="font-mono text-slate-500 flex flex-col">
+                                        <span>Latitude: {previewLat.toFixed(6)}</span>
+                                        <span>Longitude: {previewLng.toFixed(6)}</span>
+                                      </div>
+                                    </div>
+                                    <div className="bg-white border border-border-gray p-2.5 rounded-lg space-y-1">
+                                      <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Target Address Reference</span>
+                                      <p className="text-slate-500 leading-snug line-clamp-2">{address || 'No address specified'}</p>
+                                    </div>
+                                  </div>
+
+                                  {/* Mini map preview */}
+                                  <div className="relative h-28 bg-white rounded-lg overflow-hidden border border-border-gray flex items-center justify-center">
+                                    {/* Grid lines for cartography effect */}
+                                    <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:14px_14px] opacity-25" />
+                                    
+                                    {/* Circular geofence outline */}
+                                    <div 
+                                      className="absolute rounded-full border border-light-green/40 bg-primary-green/5 animate-pulse"
+                                      style={{ width: '80px', height: '80px' }}
+                                    />
+                                    <div 
+                                      className="absolute rounded-full border border-emerald-500/40"
+                                      style={{ width: '40px', height: '40px' }}
+                                    />
+
+                                    {/* Center marker */}
+                                    <div className="relative z-10 flex flex-col items-center">
+                                      <MapPin className="h-5 w-5 text-primary-green filter drop-shadow-[0_2px_4px_rgba(4,120,87,0.5)] animate-bounce" />
+                                      <div className="h-1.5 w-1.5 bg-primary-green rounded-full scale-y-50 opacity-80" />
+                                    </div>
+
+                                    <div className="absolute bottom-1 right-2 text-[8px] font-mono text-slate-500 bg-white/80 px-1 rounded">
+                                      Scale: ~{allowedRadius || 200}m
+                                    </div>
                                   </div>
                                 </div>
-                                <div className="bg-white border border-border-gray p-2.5 rounded-lg space-y-1">
-                                  <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Target Address Reference</span>
-                                  <p className="text-slate-500 leading-snug line-clamp-2">{address || 'No address specified'}</p>
-                                </div>
-                              </div>
-
-                              {/* Mini map preview */}
-                              <div className="relative h-28 bg-white rounded-lg overflow-hidden border border-border-gray flex items-center justify-center">
-                                {/* Grid lines for cartography effect */}
-                                <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:14px_14px] opacity-25" />
-                                
-                                {/* Circular geofence outline */}
-                                <div 
-                                  className="absolute rounded-full border border-light-green/40 bg-primary-green/5 animate-pulse"
-                                  style={{ width: '80px', height: '80px' }}
-                                />
-                                <div 
-                                  className="absolute rounded-full border border-emerald-500/40"
-                                  style={{ width: '40px', height: '40px' }}
-                                />
-
-                                {/* Center marker */}
-                                <div className="relative z-10 flex flex-col items-center">
-                                  <MapPin className="h-5 w-5 text-primary-green filter drop-shadow-[0_2px_4px_rgba(4,120,87,0.5)] animate-bounce" />
-                                  <div className="h-1.5 w-1.5 bg-primary-green rounded-full scale-y-50 opacity-80" />
-                                </div>
-
-                                <div className="absolute bottom-1 right-2 text-[8px] font-mono text-slate-500 bg-white/80 px-1 rounded">
-                                  Scale: ~{allowedRadius || 200}m
-                                </div>
-                              </div>
+                              )}
                             </div>
                           )}
-                        </div>
+
+                          {/* Geo-Verification Toggle Checkboxes */}
+                          <div className="bg-white/60 border border-border-gray p-4 rounded-xl space-y-3">
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Geo-Verification Settings</label>
+                            
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                              <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={geofencingEnabled}
+                                  onChange={(e) => setGeofencingEnabled(e.target.checked)}
+                                  className="rounded border-border-gray text-primary-green focus:ring-light-green bg-white h-4 w-4"
+                                />
+                                <span>Enable Geo-Fencing</span>
+                              </label>
+
+                              <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={requireGpsValidation}
+                                  onChange={(e) => setRequireGpsValidation(e.target.checked)}
+                                  className="rounded border-border-gray text-primary-green focus:ring-light-green bg-white h-4 w-4"
+                                />
+                                <span>Require GPS Validation</span>
+                              </label>
+
+                              <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={requireLivePhoto}
+                                  onChange={(e) => setRequireLivePhoto(e.target.checked)}
+                                  className="rounded border-border-gray text-primary-green focus:ring-light-green bg-white h-4 w-4"
+                                />
+                                <span>Require Live Photo</span>
+                              </label>
+
+                              <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={requireCheckout}
+                                  onChange={(e) => setRequireCheckout(e.target.checked)}
+                                  className="rounded border-border-gray text-primary-green focus:ring-light-green bg-white h-4 w-4"
+                                />
+                                <span>Require Check-Out</span>
+                              </label>
+
+                              <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={allowRemoteCompletion}
+                                  onChange={(e) => setAllowRemoteCompletion(e.target.checked)}
+                                  className="rounded border-border-gray text-primary-green focus:ring-light-green bg-white h-4 w-4"
+                                />
+                                <span>Allow Remote Completion</span>
+                              </label>
+
+                              <label className="flex items-center gap-2 text-xs text-slate-355 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={temporarilyClosed}
+                                  onChange={(e) => setTemporarilyClosed(e.target.checked)}
+                                  className="rounded border-border-gray text-primary-green focus:ring-light-green bg-white h-4 w-4"
+                                />
+                                <span className="text-slate-500 font-medium">Temporarily Closed</span>
+                              </label>
+                            </div>
+                          </div>
+                        </>
                       )}
-
-                      {/* Geo-Verification Toggle Checkboxes */}
-                      <div className="bg-white/60 border border-border-gray p-4 rounded-xl space-y-3">
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Geo-Verification Settings</label>
-                        
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                          <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={geofencingEnabled}
-                              onChange={(e) => setGeofencingEnabled(e.target.checked)}
-                              className="rounded border-border-gray text-primary-green focus:ring-light-green bg-white h-4 w-4"
-                            />
-                            <span>Enable Geo-Fencing</span>
-                          </label>
-
-                          <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={requireGpsValidation}
-                              onChange={(e) => setRequireGpsValidation(e.target.checked)}
-                              className="rounded border-border-gray text-primary-green focus:ring-light-green bg-white h-4 w-4"
-                            />
-                            <span>Require GPS Validation</span>
-                          </label>
-
-                          <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={requireLivePhoto}
-                              onChange={(e) => setRequireLivePhoto(e.target.checked)}
-                              className="rounded border-border-gray text-primary-green focus:ring-light-green bg-white h-4 w-4"
-                            />
-                            <span>Require Live Photo</span>
-                          </label>
-
-                          <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={requireCheckout}
-                              onChange={(e) => setRequireCheckout(e.target.checked)}
-                              className="rounded border-border-gray text-primary-green focus:ring-light-green bg-white h-4 w-4"
-                            />
-                            <span>Require Check-Out</span>
-                          </label>
-
-                          <label className="flex items-center gap-2 text-xs text-slate-500 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={allowRemoteCompletion}
-                              onChange={(e) => setAllowRemoteCompletion(e.target.checked)}
-                              className="rounded border-border-gray text-primary-green focus:ring-light-green bg-white h-4 w-4"
-                            />
-                            <span>Allow Remote Completion</span>
-                          </label>
-
-                          <label className="flex items-center gap-2 text-xs text-slate-355 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={temporarilyClosed}
-                              onChange={(e) => setTemporarilyClosed(e.target.checked)}
-                              className="rounded border-border-gray text-primary-green focus:ring-light-green bg-white h-4 w-4"
-                            />
-                            <span className="text-slate-500 font-medium">Temporarily Closed</span>
-                          </label>
-                        </div>
-                      </div>
-                    </div>
+                    </div>           </div>
 
                     {/* Section 3: Contacts & Assignment */}
                     <div className="space-y-4">
@@ -1364,6 +1612,7 @@ export default function HospitalsPage() {
                           <input
                             id="form-hosp-poc"
                             type="text"
+                            maxLength={100}
                             value={contactPerson}
                             onChange={(e) => { setContactPerson(e.target.value); markTouched('contact_person'); }}
                             onBlur={() => markTouched('contact_person')}
@@ -1380,6 +1629,7 @@ export default function HospitalsPage() {
                           <input
                             id="form-hosp-phone"
                             type="tel"
+                            maxLength={10}
                             value={phone}
                             onChange={(e) => { setPhone(e.target.value); markTouched('phone'); }}
                             onBlur={() => markTouched('phone')}
@@ -1398,6 +1648,7 @@ export default function HospitalsPage() {
                           <input
                             id="form-hosp-reception"
                             type="tel"
+                            maxLength={15}
                             value={receptionPhone}
                             onChange={(e) => { setReceptionPhone(e.target.value); markTouched('reception_phone'); }}
                             onBlur={() => markTouched('reception_phone')}
@@ -1414,6 +1665,7 @@ export default function HospitalsPage() {
                           <input
                             id="form-hosp-alternate"
                             type="tel"
+                            maxLength={10}
                             value={alternatePhone}
                             onChange={(e) => { setAlternatePhone(e.target.value); markTouched('alternate_phone'); }}
                             onBlur={() => markTouched('alternate_phone')}
@@ -1432,6 +1684,7 @@ export default function HospitalsPage() {
                           <input
                             id="form-hosp-email"
                             type="email"
+                            maxLength={255}
                             value={email}
                             onChange={(e) => { setEmail(e.target.value); markTouched('email'); }}
                             onBlur={() => markTouched('email')}
@@ -1448,6 +1701,7 @@ export default function HospitalsPage() {
                           <input
                             id="form-hosp-department"
                             type="text"
+                            maxLength={100}
                             value={department}
                             onChange={(e) => { setDepartment(e.target.value); markTouched('department'); }}
                             onBlur={() => markTouched('department')}
@@ -1466,6 +1720,7 @@ export default function HospitalsPage() {
                           <input
                             id="form-hosp-admin"
                             type="text"
+                            maxLength={100}
                             value={hospitalAdminName}
                             onChange={(e) => { setHospitalAdminName(e.target.value); markTouched('hospital_admin_name'); }}
                             onBlur={() => markTouched('hospital_admin_name')}
@@ -1580,6 +1835,43 @@ export default function HospitalsPage() {
                     </button>
                   </div>
                 </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Warning Error Dialog Overlay */}
+        <AnimatePresence>
+          {error && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 0.4 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setError('')}
+                className="fixed inset-0 bg-slate-900"
+              />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="w-full max-w-sm bg-white border border-border-gray rounded-2xl shadow-2xl p-6 z-10 flex flex-col items-center text-center gap-4"
+              >
+                <div className="p-3 bg-amber-50 text-amber-500 rounded-full">
+                  <AlertTriangle className="h-10 w-10 animate-bounce" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-slate-700">Warning</h4>
+                  <p className="text-xs text-slate-500 mt-2 font-medium leading-relaxed">{error}</p>
+                </div>
+                <button
+                  id="btn-error-ok"
+                  type="button"
+                  onClick={() => setError('')}
+                  className="w-full py-2.5 px-4 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-xl shadow-md transition-all cursor-pointer"
+                >
+                  OK
+                </button>
               </motion.div>
             </div>
           )}

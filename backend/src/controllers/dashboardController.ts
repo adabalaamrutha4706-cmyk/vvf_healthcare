@@ -46,7 +46,7 @@ export const getStats = async (req: AuthenticatedRequest, res: Response) => {
     if (userRole === 'Doctor') {
       whereClause += " AND appointment_type = 'doctor' AND doctor_id = $1";
       baseParams.push(userId);
-    } else if (userRole === 'Dental Doctor') {
+    } else if (userRole === 'Dental Doctor' || userRole === 'Dentist Junior' || userRole === 'Dental Assistant') {
       whereClause += " AND appointment_type = 'dental' AND doctor_id = $1";
       baseParams.push(userId);
     } else if (userRole === 'OP Technician' || userRole === 'SOP Technician') {
@@ -90,7 +90,7 @@ export const getStats = async (req: AuthenticatedRequest, res: Response) => {
         categoryStats[cat] = { today: 0, upcoming: 0, completed: 0, cancelled: 0 };
         continue;
       }
-      if (userRole === 'Dental Doctor' && cat !== 'dental') {
+      if ((userRole === 'Dental Doctor' || userRole === 'Dentist Junior' || userRole === 'Dental Assistant') && cat !== 'dental') {
         categoryStats[cat] = { today: 0, upcoming: 0, completed: 0, cancelled: 0 };
         continue;
       }
@@ -103,7 +103,7 @@ export const getStats = async (req: AuthenticatedRequest, res: Response) => {
       const paramsBase: any[] = [cat];
       let paramIdx = 2;
 
-      if (userRole === 'Doctor' || userRole === 'Dental Doctor') {
+      if (userRole === 'Doctor' || userRole === 'Dental Doctor' || userRole === 'Dentist Junior' || userRole === 'Dental Assistant') {
         queryBase += ` AND doctor_id = $${paramIdx++}`;
         paramsBase.push(userId);
       }
@@ -161,7 +161,7 @@ export const getStats = async (req: AuthenticatedRequest, res: Response) => {
       revenue = 0.00;
       pendingPayments = getSum(totalDueResult, 'pending', (row) => row.total_amount - row.paid_amount);
       pendingPaymentsCount = getCount(countRes);
-    } else if (userRole === 'Doctor' || userRole === 'Dental Doctor') {
+    } else if (userRole === 'Doctor' || userRole === 'Dental Doctor' || userRole === 'Dentist Junior' || userRole === 'Dental Assistant') {
       const revenueResult = await query(
         `SELECT sum(p.amount)::float as revenue 
          FROM payments p
@@ -188,7 +188,7 @@ export const getStats = async (req: AuthenticatedRequest, res: Response) => {
 
     // Compute revenue breakdown
     let revenueBreakdown = { cash: 0.00, upi: 0.00, card: 0.00 };
-    if (userRole === 'Admin' || userRole === 'Superadmin' || userRole === 'Doctor' || userRole === 'Dental Doctor') {
+    if (userRole === 'Admin' || userRole === 'Superadmin' || userRole === 'Doctor' || userRole === 'Dental Doctor' || userRole === 'Dentist Junior' || userRole === 'Dental Assistant') {
       let paymentsQuery = "";
       let paymentsParams: any[] = [];
       if (userRole === 'Admin' || userRole === 'Superadmin') {
@@ -297,7 +297,7 @@ export const getStats = async (req: AuthenticatedRequest, res: Response) => {
     const auditLogs = await query(auditLogsQuery);
 
     let attendanceSummary = null;
-    if (['Doctor', 'Dental Doctor', 'OP Technician', 'SOP Technician'].includes(userRole || '')) {
+    if (['Doctor', 'Dental Doctor', 'Dentist Junior', 'Dental Assistant', 'OP Technician', 'SOP Technician'].includes(userRole || '')) {
       const attendanceRes = await query(
         `SELECT 
            COUNT(DISTINCT date)::int as completed_days,
@@ -325,7 +325,7 @@ export const getStats = async (req: AuthenticatedRequest, res: Response) => {
 
     // User Performance target calculations
     let myPerformance = null;
-    if (['Reception', 'Telecaller', 'Executive', 'Doctor', 'Dental Doctor', 'OP Technician', 'SOP Technician'].includes(userRole || '')) {
+    if (['Reception', 'Telecaller', 'Executive', 'Doctor', 'Dental Doctor', 'Dentist Junior', 'Dental Assistant', 'OP Technician', 'SOP Technician'].includes(userRole || '')) {
       const now = new Date();
       const todayStr = now.toISOString().split('T')[0];
       const todayStart = `${todayStr}T00:00:00.000Z`;
@@ -389,7 +389,7 @@ export const getStats = async (req: AuthenticatedRequest, res: Response) => {
         );
         dailyCount = getCount(dailyRes);
         monthlyCount = getCount(monthlyRes);
-      } else if (userRole === 'Dental Doctor') {
+      } else if (userRole === 'Dental Doctor' || userRole === 'Dentist Junior' || userRole === 'Dental Assistant') {
         const dailyRes = await query(
           `SELECT count(*)::int as count FROM appointments 
            WHERE is_deleted = false AND doctor_id = $1 AND appointment_type = 'dental' AND status != 'Cancelled' AND appointment_date >= $2 AND appointment_date <= $3`,
@@ -577,7 +577,7 @@ export const getChartData = async (req: AuthenticatedRequest, res: Response) => 
     if (userRole === 'Doctor') {
       appTrendQuery += " AND appointment_type = 'doctor' AND doctor_id = $1";
       appTrendParams.push(userId);
-    } else if (userRole === 'Dental Doctor') {
+    } else if (userRole === 'Dental Doctor' || userRole === 'Dentist Junior' || userRole === 'Dental Assistant') {
       appTrendQuery += " AND appointment_type = 'dental' AND doctor_id = $1";
       appTrendParams.push(userId);
     } else if (userRole === 'OP Technician' || userRole === 'SOP Technician') {
@@ -599,7 +599,7 @@ export const getChartData = async (req: AuthenticatedRequest, res: Response) => 
          GROUP BY date(created_at)
          ORDER BY date ASC LIMIT 7`
       );
-    } else if (userRole === 'Doctor' || userRole === 'Dental Doctor') {
+    } else if (userRole === 'Doctor' || userRole === 'Dental Doctor' || userRole === 'Dentist Junior' || userRole === 'Dental Assistant') {
       revTrend = await query(
         `SELECT date(p.created_at) as date, sum(p.amount)::float as revenue
          FROM payments p

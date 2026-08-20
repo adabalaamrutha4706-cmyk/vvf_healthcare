@@ -88,13 +88,8 @@ export default function LoginPage() {
         
         {/* Brand Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="h-14 w-14 rounded-2xl bg-primary-green flex items-center justify-center shadow-lg mb-3">
-            <Activity className="h-7 w-7 text-white animate-pulse" />
-          </div>
-          <h1 className="text-xl font-bold text-slate-500 tracking-tight text-center leading-tight">
-            VENKATESWARA VASCULAR FOUNDATION
-          </h1>
-          <p className="text-xs text-primary-green font-bold uppercase tracking-wider mt-1">
+          <img src="/logo.png" alt="Pranavayu Logo" className="h-16 object-contain mb-2" />
+          <p className="text-xs text-primary-green font-bold uppercase tracking-wider">
             Clinical Operations Portal
           </p>
         </div>
@@ -179,71 +174,7 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* Demo Fast Logins */}
-        <div className="w-full mt-8 pt-6 border-t border-slate-100">
-          <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-4 justify-center">
-            <Sparkles className="h-3.5 w-3.5 text-emerald-600 animate-pulse" />
-            <span>Developer Sandbox Quick-Fill Logs</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2 text-[10px]">
-            <button
-              id="fill-admin"
-              onClick={() => fillCredentials('admin@vvf.org', 'admin123')}
-              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-lg font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
-            >
-              💼 Admin (Full Access)
-            </button>
-            <button
-              id="fill-dental"
-              onClick={() => fillCredentials('dental@vvf.org', 'dental123')}
-              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-lg font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
-            >
-              🦷 Dental Doctor
-            </button>
-            <button
-              id="fill-doctor"
-              onClick={() => fillCredentials('doctor@vvf.org', 'doctor123')}
-              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-lg font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
-            >
-              🩺 Doctor (Clinician)
-            </button>
-            <button
-              id="fill-reception"
-              onClick={() => fillCredentials('reception@vvf.org', 'reception123')}
-              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-lg font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
-            >
-              📝 Reception (Desk)
-            </button>
-            <button
-              id="fill-telecaller"
-              onClick={() => fillCredentials('telecaller@vvf.org', 'telecaller123')}
-              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-lg font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
-            >
-              📞 Telecaller (Leads)
-            </button>
-            <button
-              id="fill-executive"
-              onClick={() => fillCredentials('executive@vvf.org', 'executive123')}
-              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-lg font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
-            >
-              🏃‍♂️ Executive (Field)
-            </button>
-            <button
-              id="fill-optech"
-              onClick={() => fillCredentials('optech@vvf.org', 'optech123')}
-              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-lg font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
-            >
-              🔧 OP Tech (Therapies)
-            </button>
-            <button
-              id="fill-soptech"
-              onClick={() => fillCredentials('soptech@vvf.org', 'soptech123')}
-              className="py-2.5 px-3 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-lg font-semibold transition-colors text-left truncate cursor-pointer shadow-sm"
-            >
-              🔬 SOP Tech (Audit)
-            </button>
-          </div>
-        </div>
+
       </div>
 
       {/* Forgot Password Modal */}

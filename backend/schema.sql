@@ -1,5 +1,5 @@
 -- VVF Healthcare Management Web Application Database Schema
--- Run this script in the Supabase SQL Editor to initialize the database tables.
+-- Run this script in standard PostgreSQL to initialize the database tables.
 
 -- Drop tables if they already exist (Uncomment if you want a clean reset)
 -- DROP TABLE IF EXISTS audit_logs CASCADE;
@@ -33,6 +33,12 @@ CREATE TABLE IF NOT EXISTS users (
     password_change_count INTEGER DEFAULT 0,
     password_change_limit INTEGER DEFAULT 3,
     password_change_locked BOOLEAN DEFAULT FALSE,
+    staff_type VARCHAR(50) DEFAULT 'in-staff',
+    assigned_hospital_id INTEGER,
+    qualification TEXT,
+    aadhar_number VARCHAR(100),
+    date_of_joining DATE,
+    assigned_therapy VARCHAR(100),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -52,7 +58,7 @@ CREATE TABLE IF NOT EXISTS hospitals (
     deleted_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    updated_by INTEGER,
     latitude DOUBLE PRECISION,
     longitude DOUBLE PRECISION,
     
@@ -64,7 +70,9 @@ CREATE TABLE IF NOT EXISTS hospitals (
     allowed_radius INTEGER DEFAULT 200,
 
     -- Hospital Metadata
-    hospital_type VARCHAR(100) DEFAULT 'Clinic',
+    clinic_category VARCHAR(50) DEFAULT 'Hospital',
+    parent_hospital_id INTEGER REFERENCES hospitals(id) ON DELETE SET NULL,
+    hospital_type VARCHAR(100) DEFAULT 'Hospital',
     branch_code VARCHAR(50),
     visiting_hours VARCHAR(255),
     territory_zone VARCHAR(100),
@@ -91,7 +99,7 @@ CREATE TABLE IF NOT EXISTS hospitals (
 
     -- Status & Audit Fields
     temporarily_closed BOOLEAN DEFAULT FALSE,
-    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_by INTEGER,
     legacy_hospital_id VARCHAR(100)
 );
 
@@ -111,7 +119,11 @@ CREATE TABLE IF NOT EXISTS attendance (
     is_deleted BOOLEAN DEFAULT FALSE,
     deleted_at TIMESTAMP WITH TIME ZONE,
     created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+    updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    gps_latitude DOUBLE PRECISION,
+    gps_longitude DOUBLE PRECISION,
+    geo_address TEXT,
+    location_status VARCHAR(100) DEFAULT 'pending'
 );
 
 -- 4. Appointments Table
@@ -140,6 +152,19 @@ CREATE TABLE IF NOT EXISTS appointments (
     outbound_notes TEXT,
     moved_to_telecalling BOOLEAN DEFAULT FALSE,
     moved_to_telecalling_at TIMESTAMP WITH TIME ZONE,
+    
+    -- New Fields
+    co_relation VARCHAR(255),
+    date_of_birth DATE,
+    blood_group VARCHAR(50),
+    city VARCHAR(255),
+    address TEXT,
+    diagnosis TEXT,
+    reference VARCHAR(255),
+    consultation_charges DECIMAL(12, 2) DEFAULT 0.00,
+    tests_charges DECIMAL(12, 2) DEFAULT 0.00,
+    medicine_charges DECIMAL(12, 2) DEFAULT 0.00,
+
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -461,6 +486,9 @@ CREATE TABLE IF NOT EXISTS field_appointments (
     next_followup_date TIMESTAMP WITH TIME ZONE,
     telecaller_notes TEXT,
     lead_status VARCHAR(100) DEFAULT 'New Lead',
+    added_latitude DOUBLE PRECISION,
+    added_longitude DOUBLE PRECISION,
+    added_location_address TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -477,5 +505,24 @@ CREATE TABLE IF NOT EXISTS auto_redistribution_log (
     active_telecallers INTEGER NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Safe column additions
+ALTER TABLE users ADD COLUMN IF NOT EXISTS staff_type VARCHAR(50) DEFAULT 'in-staff';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS assigned_hospital_id INTEGER;
+
+-- Circular Reference Constraint Fixes
+DO $$ 
+BEGIN 
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_users_assigned_hospital') THEN
+    ALTER TABLE users ADD CONSTRAINT fk_users_assigned_hospital FOREIGN KEY (assigned_hospital_id) REFERENCES hospitals(id) ON DELETE SET NULL;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_hospitals_created_by') THEN
+    ALTER TABLE hospitals ADD CONSTRAINT fk_hospitals_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_hospitals_updated_by') THEN
+    ALTER TABLE hospitals ADD CONSTRAINT fk_hospitals_updated_by FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
 
 

@@ -160,12 +160,14 @@ export const createHospital = async (req: AuthenticatedRequest, res: Response) =
     const { 
       name, city, state, contact_person, phone, status,
       address, landmark, pincode, google_maps_link, allowed_radius,
-      hospital_type, branch_code, visiting_hours, territory_zone,
+      hospital_type, clinic_category, parent_hospital_id, parentHospitalId, branch_code, visiting_hours, territory_zone,
       reception_phone, alternate_phone, email, hospital_admin_name, department,
       assigned_executives, visit_frequency,
       require_gps_validation, require_live_photo, require_checkout, allow_remote_completion, geofencing_enabled,
       temporarily_closed
     } = req.body;
+
+    const finalParentHospitalId = parent_hospital_id !== undefined ? parent_hospital_id : (parentHospitalId !== undefined ? parentHospitalId : null);
 
     const legacyHospitalIdInput = req.body.legacyHospitalId !== undefined ? req.body.legacyHospitalId : req.body.legacy_hospital_id;
     const legacyHospitalId = legacyHospitalIdInput ? legacyHospitalIdInput.trim() : null;
@@ -207,8 +209,12 @@ export const createHospital = async (req: AuthenticatedRequest, res: Response) =
         const phoneCheck = await client.query(
           `SELECT id, name FROM hospitals 
            WHERE (phone = ANY($1) OR reception_phone = ANY($1) OR alternate_phone = ANY($1)) 
-             AND is_deleted = false`,
-          [phoneFields]
+             AND is_deleted = false
+             AND ($2::int IS NULL OR id != $2)
+             AND ($3::int IS NULL OR id != $3)
+             AND ($3::int IS NULL OR parent_hospital_id IS NULL OR parent_hospital_id != $3)
+             AND ($2::int IS NULL OR parent_hospital_id IS NULL OR parent_hospital_id != $2)`,
+          [phoneFields, null, finalParentHospitalId ? Number(finalParentHospitalId) : null]
         );
         if (phoneCheck.rows.length > 0) {
           throw {
@@ -244,13 +250,13 @@ export const createHospital = async (req: AuthenticatedRequest, res: Response) =
         `INSERT INTO hospitals (
           name, city, state, contact_person, phone, status,
           latitude, longitude, address, landmark, pincode, google_maps_link, allowed_radius,
-          hospital_type, branch_code, visiting_hours, territory_zone,
+          hospital_type, clinic_category, parent_hospital_id, branch_code, visiting_hours, territory_zone,
           reception_phone, alternate_phone, email, hospital_admin_name, department,
           assigned_executives, visit_frequency,
           require_gps_validation, require_live_photo, require_checkout, allow_remote_completion, geofencing_enabled,
           temporarily_closed, created_by, hospital_uid, geo_verification_status, legacy_hospital_id
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34) RETURNING *`,
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36) RETURNING *`,
         [
           name, city, state, contact_person || '', phone || '', status || 'ACTIVE',
           resolvedLat,
@@ -260,7 +266,9 @@ export const createHospital = async (req: AuthenticatedRequest, res: Response) =
           pincode || '',
           google_maps_link || '',
           allowed_radius !== undefined && allowed_radius !== null && allowed_radius !== '' ? parseInt(allowed_radius, 10) : 200,
-          hospital_type || 'Clinic',
+          hospital_type || 'Hospital',
+          clinic_category || 'Hospital',
+          finalParentHospitalId,
           finalBranchCode,
           visiting_hours || '',
           territory_zone || '',
@@ -387,12 +395,14 @@ export const updateHospital = async (req: AuthenticatedRequest, res: Response) =
     const { 
       name, city, state, contact_person, phone, status,
       address, landmark, pincode, google_maps_link, allowed_radius,
-      hospital_type, branch_code, visiting_hours, territory_zone,
+      hospital_type, clinic_category, parent_hospital_id, parentHospitalId, branch_code, visiting_hours, territory_zone,
       reception_phone, alternate_phone, email, hospital_admin_name, department,
       assigned_executives, visit_frequency,
       require_gps_validation, require_live_photo, require_checkout, allow_remote_completion, geofencing_enabled,
       temporarily_closed
     } = req.body;
+
+    const newParentHospitalId = parent_hospital_id !== undefined ? parent_hospital_id : (parentHospitalId !== undefined ? parentHospitalId : hospital.parent_hospital_id);
 
     const legacyHospitalIdInput = req.body.legacyHospitalId !== undefined ? req.body.legacyHospitalId : req.body.legacy_hospital_id;
     const newLegacyHospitalId = legacyHospitalIdInput !== undefined ? (legacyHospitalIdInput ? legacyHospitalIdInput.trim() : null) : hospital.legacy_hospital_id;
@@ -416,8 +426,16 @@ export const updateHospital = async (req: AuthenticatedRequest, res: Response) =
       const phoneCheck = await query(
         `SELECT id, name FROM hospitals 
          WHERE (phone = ANY($1) OR reception_phone = ANY($1) OR alternate_phone = ANY($1)) 
-           AND id != $2 AND is_deleted = false`,
-        [phoneFields, id]
+           AND is_deleted = false
+           AND ($2::int IS NULL OR id != $2)
+           AND ($3::int IS NULL OR id != $3)
+           AND ($3::int IS NULL OR parent_hospital_id IS NULL OR parent_hospital_id != $3)
+           AND ($2::int IS NULL OR parent_hospital_id IS NULL OR parent_hospital_id != $2)`,
+        [
+          phoneFields, 
+          parseInt(id, 10), 
+          newParentHospitalId ? Number(newParentHospitalId) : null
+        ]
       );
       if (phoneCheck.rows.length > 0) {
         return res.status(400).json({
@@ -440,6 +458,7 @@ export const updateHospital = async (req: AuthenticatedRequest, res: Response) =
     const newGmaps = google_maps_link !== undefined ? google_maps_link : hospital.google_maps_link;
     const newRadius = allowed_radius !== undefined ? (allowed_radius !== null && allowed_radius !== '' ? parseInt(allowed_radius, 10) : null) : hospital.allowed_radius;
     const newType = hospital_type !== undefined ? hospital_type : hospital.hospital_type;
+    const newCategory = clinic_category !== undefined ? clinic_category : hospital.clinic_category;
     const newBranch = branch_code !== undefined ? branch_code : hospital.branch_code;
     const newHours = visiting_hours !== undefined ? visiting_hours : hospital.visiting_hours;
     const newZone = territory_zone !== undefined ? territory_zone : hospital.territory_zone;
@@ -481,16 +500,16 @@ export const updateHospital = async (req: AuthenticatedRequest, res: Response) =
       `UPDATE hospitals SET
         name = $1, city = $2, state = $3, contact_person = $4, phone = $5, status = $6,
         latitude = $7, longitude = $8, address = $9, landmark = $10, pincode = $11, google_maps_link = $12, allowed_radius = $13,
-        hospital_type = $14, branch_code = $15, visiting_hours = $16, territory_zone = $17,
-        reception_phone = $18, alternate_phone = $19, email = $20, hospital_admin_name = $21, department = $22,
-        assigned_executives = $23, visit_frequency = $24,
-        require_gps_validation = $25, require_live_photo = $26, require_checkout = $27, allow_remote_completion = $28, geofencing_enabled = $29,
-        temporarily_closed = $30, updated_by = $31, geo_verification_status = $32, legacy_hospital_id = $33, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $34 AND is_deleted = false RETURNING *`,
+        hospital_type = $14, clinic_category = $15, parent_hospital_id = $16, branch_code = $17, visiting_hours = $18, territory_zone = $19,
+        reception_phone = $20, alternate_phone = $21, email = $22, hospital_admin_name = $23, department = $24,
+        assigned_executives = $25, visit_frequency = $26,
+        require_gps_validation = $27, require_live_photo = $28, require_checkout = $29, allow_remote_completion = $30, geofencing_enabled = $31,
+        temporarily_closed = $32, updated_by = $33, geo_verification_status = $34, legacy_hospital_id = $35, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $36 AND is_deleted = false RETURNING *`,
       [
         newName, newCity, newState, newContact, newPhone, newStatus,
         resolvedLat, resolvedLng, newAddress, newLandmark, newPincode, newGmaps, newRadius,
-        newType, newBranch, newHours, newZone,
+        newType, newCategory, newParentHospitalId, newBranch, newHours, newZone,
         newRecPhone, newAltPhone, newEmail, newAdminName, newDept,
         newAssigned, newFreq,
         newGpsVal, newLivePhoto, newCheckOut, newRemote, newGeofence,
