@@ -237,6 +237,7 @@ export const createTherapy = async (req: AuthenticatedRequest, res: Response) =>
       op_technician_id,
       sop_technician_id,
       remarks,
+      diagnosis,
       // Specific fields
       dive_surface_timings,
       pressure_type,
@@ -268,8 +269,8 @@ export const createTherapy = async (req: AuthenticatedRequest, res: Response) =>
     const sessionRes = await query(
       `INSERT INTO therapy_sessions (
         patient_name, mobile_number, therapy_type, timings, session_date, 
-        hospital_id, op_technician_id, sop_technician_id, op_verified, sop_verified, status, remarks
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, false, 'Pending Verification', $9) RETURNING *`,
+        hospital_id, op_technician_id, sop_technician_id, op_verified, sop_verified, status, remarks, diagnosis
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, false, 'Pending Verification', $9, $10) RETURNING *`,
       [
         patient_name,
         mobile_number,
@@ -279,7 +280,8 @@ export const createTherapy = async (req: AuthenticatedRequest, res: Response) =>
         parseInt(hospital_id, 10),
         op_technician_id ? parseInt(op_technician_id, 10) : null,
         sop_technician_id ? parseInt(sop_technician_id, 10) : null,
-        remarks || ''
+        remarks || '',
+        diagnosis || ''
       ]
     );
 
@@ -378,6 +380,7 @@ export const updateTherapy = async (req: AuthenticatedRequest, res: Response) =>
       op_technician_id,
       sop_technician_id,
       remarks,
+      diagnosis,
       status,
       // Specific details
       dive_surface_timings,
@@ -405,6 +408,7 @@ export const updateTherapy = async (req: AuthenticatedRequest, res: Response) =>
     const newOpTech = op_technician_id !== undefined ? (op_technician_id ? parseInt(op_technician_id, 10) : null) : session.op_technician_id;
     const newSopTech = sop_technician_id !== undefined ? (sop_technician_id ? parseInt(sop_technician_id, 10) : null) : session.sop_technician_id;
     const newRemarks = remarks !== undefined ? remarks : session.remarks;
+    const newDiagnosis = diagnosis !== undefined ? diagnosis : session.diagnosis;
     const newStatus = status !== undefined ? status : session.status;
 
     await query(
@@ -413,14 +417,14 @@ export const updateTherapy = async (req: AuthenticatedRequest, res: Response) =>
         rescheduled = $5, rescheduled_date = $6, rescheduled_time = $7,
         actual_start = $8, end_time = $9, hospital_id = $10,
         op_technician_id = $11, sop_technician_id = $12, remarks = $13,
-        status = $14, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $15`,
+        status = $14, diagnosis = $15, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $16`,
       [
         newPatient, newMobile, newTimings, newDate,
         newRescheduled, newRescheduledDate, newRescheduledTime,
         newActualStart, newEndTime, newHospital,
         newOpTech, newSopTech, newRemarks,
-        newStatus, session.id
+        newStatus, newDiagnosis, session.id
       ]
     );
 

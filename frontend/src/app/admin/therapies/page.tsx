@@ -91,6 +91,7 @@ export default function AdminTherapies() {
   const [treatmentType, setTreatmentType] = useState('');
   const [dentistName, setDentistName] = useState('');
   const [remarks, setRemarks] = useState('');
+  const [diagnosis, setDiagnosis] = useState('');
 
   const DEFAULT_PHYSIOTHERAPY_OPTIONS = [
     "SIPCD",
@@ -195,6 +196,7 @@ export default function AdminTherapies() {
     setCustomPhysioTherapy('');
     setPhysioOptions(DEFAULT_PHYSIOTHERAPY_OPTIONS);
     setRemarks('');
+    setDiagnosis('');
     setError('');
     setSuccess('');
     setIsModalOpen(true);
@@ -243,6 +245,7 @@ export default function AdminTherapies() {
     setTreatmentType(session.therapy_type === 'Dental' ? session.dive_surface_timings || '' : '');
     setDentistName(session.therapy_type === 'Dental' ? session.pressure_type || '' : '');
     setRemarks(session.remarks || '');
+    setDiagnosis(session.diagnosis || '');
 
     // Physiotherapy custom routine selection
     const physioList = session.therapy_type === 'Physiotherapy' && session.dive_surface_timings ? session.dive_surface_timings.split(', ') : [];
@@ -302,7 +305,8 @@ export default function AdminTherapies() {
         actual_start: formTherapyType === 'Lab' ? null : actualStart,
         end_time: formTherapyType === 'Lab' ? null : endTime,
         hospital_id: parseInt(hospitalId, 10),
-        remarks
+        remarks,
+        diagnosis
       };
 
       if (formTherapyType !== 'Lab') {
@@ -1513,6 +1517,18 @@ export default function AdminTherapies() {
                               </div>
                             </>
                           )}
+
+                          {/* Diagnosis field */}
+                          <div className="col-span-1 md:col-span-2">
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Diagnosis</label>
+                            <input
+                              type="text"
+                              value={diagnosis}
+                              onChange={(e) => setDiagnosis(e.target.value)}
+                              placeholder="Enter patient diagnosis (e.g. Diabetic Foot Ulcer)..."
+                              className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none transition-all"
+                            />
+                          </div>
 
                           {/* Remarks field (Common to all) */}
                           <div className="col-span-1 md:col-span-2">

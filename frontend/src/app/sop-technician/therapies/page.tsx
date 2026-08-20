@@ -52,6 +52,7 @@ function SOPTherapiesContent() {
   const [sopTechnicianId, setSopTechnicianId] = useState('');
   const [sopVerified, setSopVerified] = useState(false);
   const [remarks, setRemarks] = useState('');
+  const [diagnosis, setDiagnosis] = useState('');
 
   // Form Fields (Schedule)
   const [patientName, setPatientName] = useState('');
@@ -208,6 +209,7 @@ function SOPTherapiesContent() {
     setCustomPhysioTherapy('');
     setPhysioOptions(DEFAULT_PHYSIOTHERAPY_OPTIONS);
     setRemarks('');
+    setDiagnosis('');
     setError('');
     setSuccess('');
     setIsScheduleModalOpen(true);
@@ -256,6 +258,7 @@ function SOPTherapiesContent() {
     setTreatmentType(session.therapy_type === 'Dental' ? session.dive_surface_timings || '' : '');
     setDentistName(session.therapy_type === 'Dental' ? session.pressure_type || '' : '');
     setRemarks(session.remarks || '');
+    setDiagnosis(session.diagnosis || '');
 
     // Physiotherapy custom routine selection
     const physioList = session.therapy_type === 'Physiotherapy' && session.dive_surface_timings ? session.dive_surface_timings.split(', ') : [];
@@ -372,7 +375,8 @@ function SOPTherapiesContent() {
         actual_start: formTherapyType === 'Lab' ? null : actualStart,
         end_time: formTherapyType === 'Lab' ? null : endTime,
         hospital_id: parseInt(hospitalId, 10),
-        remarks
+        remarks,
+        diagnosis
       };
 
       if (formTherapyType !== 'Lab') {
@@ -1601,6 +1605,18 @@ function SOPTherapiesContent() {
                           </>
                         )}
 
+                        {/* Diagnosis field */}
+                        <div className="col-span-1 md:col-span-2">
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Diagnosis</label>
+                          <input
+                            type="text"
+                            value={diagnosis}
+                            onChange={(e) => setDiagnosis(e.target.value)}
+                            placeholder="Enter patient diagnosis (e.g. Diabetic Foot Ulcer)..."
+                            className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2.5 px-3 text-xs text-slate-550 outline-none transition-all"
+                          />
+                        </div>
+
                         {/* Add Remarks / Notes */}
                         <div className="col-span-1 md:col-span-2">
                           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Session Remarks / Notes (Optional)</label>
@@ -1609,7 +1625,7 @@ function SOPTherapiesContent() {
                             value={remarks}
                             onChange={(e) => setRemarks(e.target.value)}
                             placeholder="Add administrative notes or logs remarks..."
-                            className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-slate-550 outline-none"
+                            className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-slate-555 outline-none"
                           />
                         </div>
                       </>

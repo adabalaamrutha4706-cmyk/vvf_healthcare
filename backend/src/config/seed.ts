@@ -237,6 +237,7 @@ export const seedDatabase = async () => {
     await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS session_duration INTEGER;").catch(() => {});
     await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS package_type VARCHAR(100);").catch(() => {});
     await query("ALTER TABLE appointments ADD COLUMN IF NOT EXISTS service_remarks TEXT;").catch(() => {});
+    await query("ALTER TABLE therapy_sessions ADD COLUMN IF NOT EXISTS diagnosis TEXT;").catch(() => {});
     await query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_splits JSONB DEFAULT NULL;").catch(() => {});
     await query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS upi_app VARCHAR(100);").catch(() => {});
     await query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS payer_upi_id VARCHAR(255);").catch(() => {});
@@ -291,6 +292,7 @@ export const seedDatabase = async () => {
         verification_date TIMESTAMP WITH TIME ZONE,
         status VARCHAR(100) DEFAULT 'Pending Verification',
         remarks TEXT,
+        diagnosis TEXT,
         hospital_id INTEGER,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

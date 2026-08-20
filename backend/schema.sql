@@ -343,6 +343,7 @@ CREATE TABLE IF NOT EXISTS therapy_sessions (
     verification_date TIMESTAMP WITH TIME ZONE,
     status VARCHAR(100) DEFAULT 'Pending Verification',
     remarks TEXT,
+    diagnosis TEXT,
     hospital_id INTEGER REFERENCES hospitals(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

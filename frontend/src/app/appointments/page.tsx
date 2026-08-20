@@ -136,6 +136,7 @@ function AppointmentsContent() {
   const [opTechnicianIdTherapy, setOpTechnicianIdTherapy] = useState('');
   const [sopTechnicianIdTherapy, setSopTechnicianIdTherapy] = useState('');
   const [remarksTherapy, setRemarksTherapy] = useState('');
+  const [diagnosisTherapy, setDiagnosisTherapy] = useState('');
 
   // Therapy specific details
   const [diveTimeTherapy, setDiveTimeTherapy] = useState('');
@@ -844,6 +845,7 @@ function AppointmentsContent() {
     setCustomPhysioTherapyTherapy('');
     setPhysioOptionsTherapy(DEFAULT_PHYSIOTHERAPY_OPTIONS);
     setRemarksTherapy('');
+    setDiagnosisTherapy('');
     setError('');
     setSuccess('');
     setIsTherapyModalOpen(true);
@@ -891,6 +893,7 @@ function AppointmentsContent() {
     setTreatmentTypeTherapy(session.therapy_type === 'Dental' ? session.dive_surface_timings || '' : '');
     setDentistNameTherapy(session.therapy_type === 'Dental' ? session.pressure_type || '' : '');
     setRemarksTherapy(session.remarks || '');
+    setDiagnosisTherapy(session.diagnosis || '');
 
     // Physiotherapy custom routine selection
     const physioList = session.therapy_type === 'Physiotherapy' && session.dive_surface_timings ? session.dive_surface_timings.split(', ') : [];
@@ -952,7 +955,8 @@ function AppointmentsContent() {
         actual_start: formTherapyType === 'Lab' ? null : actualStartTherapy,
         end_time: formTherapyType === 'Lab' ? null : endTimeTherapy,
         hospital_id: parseInt(hospitalIdTherapy, 10),
-        remarks: remarksTherapy
+        remarks: remarksTherapy,
+        diagnosis: diagnosisTherapy
       };
 
       if (formTherapyType !== 'Lab') {
@@ -4246,6 +4250,18 @@ function AppointmentsContent() {
                         </>
                       )}
 
+                      {/* Diagnosis field */}
+                      <div className="col-span-1 md:col-span-2">
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Diagnosis</label>
+                        <input
+                          type="text"
+                          value={diagnosisTherapy}
+                          onChange={(e) => setDiagnosisTherapy(e.target.value)}
+                          placeholder="Enter patient diagnosis (e.g. Diabetic Foot Ulcer)..."
+                          className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2.5 px-3 text-xs text-slate-550 outline-none transition-all"
+                        />
+                      </div>
+
                       {/* Notes / Remarks */}
                       <div className="col-span-1 md:col-span-2">
                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Session Remarks / Notes (Optional)</label>
@@ -4254,7 +4270,7 @@ function AppointmentsContent() {
                           value={remarksTherapy}
                           onChange={(e) => setRemarksTherapy(e.target.value)}
                           placeholder="Add administrative notes or logs remarks..."
-                          className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-slate-550 outline-none"
+                          className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-slate-555 outline-none"
                         />
                       </div>
                     </div>
