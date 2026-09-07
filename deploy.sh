@@ -54,7 +54,7 @@ ssh $SSH_OPTS "$VPS_USER@$VPS_IP" << 'EOF'
         echo "⚠️ backend/.env file not found. Creating a template..."
         cat << 'ENV' > .env
 PORT=5001
-DATABASE_URL=postgresql://postgres:lms_password@localhost:5432/vvf_healthcare
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/vvf_healthcare
 JWT_SECRET=super_secret_vvf_healthcare_jwt_token_key_12345
 JWT_EXPIRES_IN=7d
 UPLOAD_DIR=uploads

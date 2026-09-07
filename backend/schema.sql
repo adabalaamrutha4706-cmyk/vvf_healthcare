@@ -197,6 +197,10 @@ CREATE TABLE IF NOT EXISTS leads (
     notes TEXT,
     callback_time TIMESTAMP WITH TIME ZONE,
     assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    referral_type VARCHAR(100),
+    referrer_name VARCHAR(255),
+    appointment_type VARCHAR(100),
+    service_type VARCHAR(255),
     is_deleted BOOLEAN DEFAULT FALSE,
     deleted_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -523,7 +527,30 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_hospitals_updated_by') THEN
     ALTER TABLE hospitals ADD CONSTRAINT fk_hospitals_updated_by FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL;
   END IF;
-END $$;
+-- Oxygen Cylinders & Liquid Tanks Stock Table
+CREATE TABLE IF NOT EXISTS oxygen_cylinders (
+    id SERIAL PRIMARY KEY,
+    container_type VARCHAR(50) NOT NULL,
+    movement_type VARCHAR(50) NOT NULL,
+    entry_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    bill_dc_no VARCHAR(100),
+    psi_pressure VARCHAR(100),
+    photo_url TEXT,
+    quantity INTEGER DEFAULT 1,
+    notes TEXT,
+    hospital_id INTEGER REFERENCES hospitals(id) ON DELETE SET NULL,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_by_name VARCHAR(255),
+    is_deleted BOOLEAN DEFAULT FALSE,
+    deleted_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_oxygen_cylinders_type ON oxygen_cylinders(container_type);
+CREATE INDEX IF NOT EXISTS idx_oxygen_cylinders_movement ON oxygen_cylinders(movement_type);
+CREATE INDEX IF NOT EXISTS idx_oxygen_cylinders_hospital ON oxygen_cylinders(hospital_id);
+
 
 
 

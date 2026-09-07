@@ -641,11 +641,145 @@ export const getChartData = async (req: AuthenticatedRequest, res: Response) => 
   }
 };
 
+const formatAppDateTime = (dateVal: any) => {
+  if (!dateVal) return '';
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return String(dateVal);
+    return d.toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  } catch (e) {
+    return String(dateVal);
+  }
+};
+
+export const processAppointmentAndPaymentNotifications = async () => {
+  try {
+    const now = new Date();
+
+    // 1. Process 30-Minute Pre-Appointment Reminders & Today's Appointments
+    const appointmentsResult = await query(`
+      SELECT a.*, h.name as hospital_name
+      FROM appointments a
+      LEFT JOIN hospitals h ON a.hospital_id = h.id
+      WHERE a.is_deleted = false
+        AND a.appointment_date >= NOW() - INTERVAL '2 hours'
+        AND a.appointment_date <= NOW() + INTERVAL '24 hours'
+    `);
+
+    for (const app of appointmentsResult.rows) {
+      const appDate = new Date(app.appointment_date);
+      if (isNaN(appDate.getTime())) continue;
+
+      const diffMs = appDate.getTime() - now.getTime();
+      const diffMins = Math.round(diffMs / 60000);
+      const formattedTime = formatAppDateTime(appDate);
+      const recipientId = app.doctor_id || app.technician_id || null;
+
+      // 30-Minute Pre-Appointment Reminder (triggers when appointment is between -5 and +35 mins away)
+      if (diffMins >= -5 && diffMins <= 35) {
+        const title = `Upcoming Appointment (In 30 Mins)`;
+        const msgPattern = `%Appointment #${app.id}%`;
+
+        const existingNotif = await query(
+          `SELECT id FROM notifications WHERE (title LIKE 'Upcoming Appointment%' OR title LIKE '30-Min%') AND message LIKE $1`,
+          [msgPattern]
+        );
+
+        if (existingNotif.rows.length === 0) {
+          const reminderMins = diffMins > 0 ? diffMins : 30;
+          const msg = `Reminder: Appointment for ${app.patient_name} is scheduled at ${formattedTime} (in ~${reminderMins} minutes). (Appointment #${app.id})`;
+          if (recipientId !== null) {
+            await query(
+              'INSERT INTO notifications (user_id, title, message) VALUES ($1, $2, $3)',
+              [recipientId, title, msg]
+            );
+          }
+          await query(
+            'INSERT INTO notifications (user_id, title, message) VALUES (NULL, $1, $2)',
+            [title, msg]
+          );
+        }
+      }
+
+      // Today's Appointment Alert
+      const appDateStr = appDate.toISOString().split('T')[0];
+      const todayDateStr = now.toISOString().split('T')[0];
+      if (appDateStr === todayDateStr) {
+        const todayTitle = `Today's Appointment`;
+        const todayMsgPattern = `%Appointment #${app.id}%`;
+
+        const existingTodayNotif = await query(
+          `SELECT id FROM notifications WHERE title = $1 AND message LIKE $2`,
+          [todayTitle, todayMsgPattern]
+        );
+
+        if (existingTodayNotif.rows.length === 0) {
+          const todayMsg = `Appointment for ${app.patient_name} is scheduled for today at ${formattedTime}. (Appointment #${app.id})`;
+          if (recipientId !== null) {
+            await query(
+              'INSERT INTO notifications (user_id, title, message) VALUES ($1, $2, $3)',
+              [recipientId, todayTitle, todayMsg]
+            );
+          }
+          await query(
+            'INSERT INTO notifications (user_id, title, message) VALUES (NULL, $1, $2)',
+            [todayTitle, todayMsg]
+          );
+        }
+      }
+    }
+
+    // 2. Process Pending Payments Notifications
+    const pendingPaymentsResult = await query(`
+      SELECT a.*, (a.total_amount - a.paid_amount) as due_amount
+      FROM appointments a
+      WHERE a.is_deleted = false
+        AND (a.total_amount - a.paid_amount) > 0
+        AND (a.payment_status IS NULL OR a.payment_status IN ('Unpaid', 'Pending', 'Partial'))
+        AND a.created_at >= NOW() - INTERVAL '30 days'
+    `);
+
+    for (const app of pendingPaymentsResult.rows) {
+      const dueAmount = parseFloat(app.due_amount || '0').toFixed(2);
+      if (parseFloat(dueAmount) <= 0) continue;
+
+      const title = `Pending Payment Alert`;
+      const msgPattern = `%Appointment #${app.id}%`;
+
+      const existingPaymentNotif = await query(
+        `SELECT id FROM notifications 
+         WHERE title = $1 AND message LIKE $2 AND created_at >= NOW() - INTERVAL '24 hours'`,
+        [title, msgPattern]
+      );
+
+      if (existingPaymentNotif.rows.length === 0) {
+        const msg = `Pending payment of ₹${dueAmount} is due for patient ${app.patient_name} (Appointment #${app.id}).`;
+        await query(
+          'INSERT INTO notifications (user_id, title, message) VALUES (NULL, $1, $2)',
+          [title, msg]
+        );
+      }
+    }
+  } catch (err) {
+    console.error('Error in processAppointmentAndPaymentNotifications:', err);
+  }
+};
+
 export const getNotifications = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user?.id;
     const userRole = req.user?.role;
     
+    // Automatically trigger notification checks for appointments and pending payments
+    await processAppointmentAndPaymentNotifications().catch(() => {});
+
     // Get notifications for this user (or global notifications where user_id is null)
     const result = await query(
       `SELECT * FROM notifications 

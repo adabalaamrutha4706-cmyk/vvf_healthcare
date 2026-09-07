@@ -39,6 +39,30 @@ export default function TelecallerPage() {
   const [notes, setNotes] = useState('');
   const [callbackTime, setCallbackTime] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
+  const [referralType, setReferralType] = useState('');
+  const [referrerName, setReferrerName] = useState('');
+  const [appointmentType, setAppointmentType] = useState('');
+  const [serviceType, setServiceType] = useState('');
+
+  const getReferrerLabel = (type: string) => {
+    switch (type) {
+      case 'Doctor': return 'Doctor Name';
+      case 'Old Patient': return 'Old Patient Name';
+      case 'Workers': return 'Worker Name';
+      case 'Other': return 'Referrer / Source Name';
+      default: return 'Referrer Name';
+    }
+  };
+
+  const getReferrerPlaceholder = (type: string) => {
+    switch (type) {
+      case 'Doctor': return 'e.g. Dr. Rajesh Sharma';
+      case 'Old Patient': return 'e.g. Ramesh Patel';
+      case 'Workers': return 'e.g. Suresh (Field Worker)';
+      case 'Other': return 'Enter referrer name / details';
+      default: return 'Enter referrer name';
+    }
+  };
 
   // Sync with URL query parameter on mount
   useEffect(() => {
@@ -91,6 +115,10 @@ export default function TelecallerPage() {
     setContactNumber('');
     setStatus('Interested');
     setNotes('');
+    setReferralType('');
+    setReferrerName('');
+    setAppointmentType('');
+    setServiceType('');
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     tomorrow.setHours(11, 0, 0, 0);
@@ -109,6 +137,10 @@ export default function TelecallerPage() {
     setNotes(lead.notes || '');
     setCallbackTime(lead.callback_time ? new Date(lead.callback_time).toISOString().slice(0, 16) : '');
     setAssignedTo(lead.assigned_to?.toString() || '');
+    setReferralType(lead.referral_type || '');
+    setReferrerName(lead.referrer_name || '');
+    setAppointmentType(lead.appointment_type || '');
+    setServiceType(lead.service_type || '');
     setError('');
     setSuccess('');
     setIsFormOpen(true);
@@ -126,7 +158,11 @@ export default function TelecallerPage() {
       status,
       notes,
       callback_time: callbackTime ? new Date(callbackTime).toISOString() : null,
-      assigned_to: assignedTo ? parseInt(assignedTo) : null
+      assigned_to: assignedTo ? parseInt(assignedTo) : null,
+      referral_type: referralType,
+      referrer_name: referrerName,
+      appointment_type: appointmentType,
+      service_type: serviceType
     };
 
     try {
@@ -160,7 +196,11 @@ export default function TelecallerPage() {
   const filteredLeads = leads.filter(l => {
     const matchesSearch = l.patient_name.toLowerCase().includes(search.toLowerCase()) ||
       l.contact_number.includes(search) ||
-      (l.notes && l.notes.toLowerCase().includes(search.toLowerCase()));
+      (l.notes && l.notes.toLowerCase().includes(search.toLowerCase())) ||
+      (l.referral_type && l.referral_type.toLowerCase().includes(search.toLowerCase())) ||
+      (l.referrer_name && l.referrer_name.toLowerCase().includes(search.toLowerCase())) ||
+      (l.appointment_type && l.appointment_type.toLowerCase().includes(search.toLowerCase())) ||
+      (l.service_type && l.service_type.toLowerCase().includes(search.toLowerCase()));
 
     const matchesStatus = statusFilter === 'All' || l.status === statusFilter;
 
@@ -431,8 +471,22 @@ export default function TelecallerPage() {
                               </span>
                             </div>
                           )}
-                          <div className="text-[10px] text-slate-500 border-t border-border-gray pt-2 truncate">
-                            Assigned Telecaller: <span className="text-slate-500 font-semibold">{lead.assigned_name || 'Unassigned'}</span>
+                          <div className="text-[10px] text-slate-500 border-t border-border-gray pt-2 truncate flex flex-wrap items-center justify-between gap-1">
+                            <span>Assigned Telecaller: <span className="text-slate-500 font-semibold">{lead.assigned_name || 'Unassigned'}</span></span>
+                            {lead.referral_type && (
+                              <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded text-[9px] font-semibold">
+                                Referral: {lead.referral_type} {lead.referrer_name ? `(${lead.referrer_name})` : ''}
+                              </span>
+                            )}
+                            {lead.appointment_type && (
+                              <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold border ${
+                                lead.appointment_type === 'Doctor' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                lead.appointment_type === 'Dental' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                'bg-amber-50 text-amber-700 border-amber-200'
+                              }`}>
+                                {lead.appointment_type}{lead.service_type ? `: ${lead.service_type}` : ''}
+                              </span>
+                            )}
                           </div>
                         </div>
 
@@ -551,6 +605,120 @@ export default function TelecallerPage() {
                         ]}
                       />
                     </div>
+                  </div>
+
+                  {/* Referral Option & Referrer Name */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Referral Option</label>
+                      <SelectField
+                        id="form-lead-referral-type"
+                        value={referralType}
+                        onChange={(val) => {
+                          setReferralType(val);
+                          if (!val) setReferrerName('');
+                        }}
+                        triggerClassName="py-2 px-3 text-xs"
+                        options={[
+                          { value: '', label: 'Select Referral (Optional)' },
+                          { value: 'Doctor', label: 'Doctor' },
+                          { value: 'Old Patient', label: 'Old Patient' },
+                          { value: 'Workers', label: 'Workers' },
+                          { value: 'Other', label: 'Other' },
+                        ]}
+                      />
+                    </div>
+                    {referralType ? (
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                          {getReferrerLabel(referralType)}
+                        </label>
+                        <input
+                          id="form-lead-referrer-name"
+                          type="text"
+                          required={!!referralType}
+                          value={referrerName}
+                          onChange={(e) => setReferrerName(e.target.value)}
+                          placeholder={getReferrerPlaceholder(referralType)}
+                          className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none"
+                        />
+                      </div>
+                    ) : (
+                      <div className="hidden sm:block" />
+                    )}
+                  </div>
+
+                  {/* Appointment Type & Service Required */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Appointment Type</label>
+                      <SelectField
+                        id="form-lead-appointment-type"
+                        value={appointmentType}
+                        onChange={(val) => {
+                          setAppointmentType(val);
+                          if (val !== 'Service' && val !== 'Doctor' && val !== 'Dental') {
+                            setServiceType('');
+                          }
+                        }}
+                        triggerClassName="py-2 px-3 text-xs"
+                        options={[
+                          { value: '', label: 'Select Appointment Type (Optional)' },
+                          { value: 'Doctor', label: 'Doctor Consultation' },
+                          { value: 'Dental', label: 'Dental Care' },
+                          { value: 'Service', label: 'Therapy / Service' },
+                        ]}
+                      />
+                    </div>
+                    {appointmentType === 'Service' ? (
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Service Required</label>
+                        <SelectField
+                          id="form-lead-service-type"
+                          value={serviceType}
+                          onChange={setServiceType}
+                          triggerClassName="py-2 px-3 text-xs"
+                          options={[
+                            { value: '', label: 'Select Service Needed' },
+                            { value: 'HBOT (Hyperbaric Oxygen Therapy)', label: 'HBOT (Hyperbaric Oxygen)' },
+                            { value: 'Ozone Therapy', label: 'Ozone Therapy' },
+                            { value: 'Physiotherapy', label: 'Physiotherapy' },
+                            { value: 'Pelvic Chair Therapy', label: 'Pelvic Chair Therapy' },
+                            { value: 'SIPCD Therapy', label: 'SIPCD Therapy' },
+                            { value: 'Zero Gravity Therapy', label: 'Zero Gravity Therapy' },
+                            { value: 'Hydrogen Inhalation', label: 'Hydrogen Inhalation' },
+                            { value: 'Lab Test / Diagnostic', label: 'Lab Test / Diagnostic' },
+                            { value: 'Other Service', label: 'Other Service' },
+                          ]}
+                        />
+                      </div>
+                    ) : appointmentType === 'Doctor' ? (
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Doctor Specialty / Dept</label>
+                        <input
+                          id="form-lead-doctor-specialty"
+                          type="text"
+                          value={serviceType}
+                          onChange={(e) => setServiceType(e.target.value)}
+                          placeholder="e.g. General Medicine, Ortho, Cardio"
+                          className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none"
+                        />
+                      </div>
+                    ) : appointmentType === 'Dental' ? (
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Dental Concern / Service</label>
+                        <input
+                          id="form-lead-dental-concern"
+                          type="text"
+                          value={serviceType}
+                          onChange={(e) => setServiceType(e.target.value)}
+                          placeholder="e.g. Tooth Extraction, Cleaning, Braces"
+                          className="w-full bg-white border border-border-gray focus:border-primary-green rounded-xl py-2 px-3 text-xs text-slate-500 outline-none"
+                        />
+                      </div>
+                    ) : (
+                      <div className="hidden sm:block" />
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

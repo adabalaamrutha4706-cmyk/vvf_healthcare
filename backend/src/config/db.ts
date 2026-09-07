@@ -52,7 +52,8 @@ const initialData: Record<string, any[]> = {
   therapy_sipcd: [],
   therapy_zero_gravity: [],
   therapy_hydrogen_inhalation: [],
-  therapy_lab: []
+  therapy_lab: [],
+  oxygen_cylinders: []
 };
 
 

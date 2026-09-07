@@ -138,6 +138,8 @@ export function middleware(request: NextRequest) {
           response = NextResponse.redirect(new URL('/login', request.url));
         } else if (pathname.startsWith('/clinical-worklists') && !rolesList.includes('OP Technician') && !rolesList.includes('SOP Technician') && !isSuper) {
           response = NextResponse.redirect(new URL('/login', request.url));
+        } else if (pathname.startsWith('/oxygen-cylinders') && !rolesList.includes('Admin') && !rolesList.includes('Reception') && !rolesList.includes('OP Technician') && !rolesList.includes('SOP Technician') && !rolesList.includes('Doctor') && !rolesList.includes('Dental Doctor') && !rolesList.includes('Dentist Junior') && !rolesList.includes('Dental Assistant') && !isSuper) {
+          response = NextResponse.redirect(new URL('/login', request.url));
         }
       }
 

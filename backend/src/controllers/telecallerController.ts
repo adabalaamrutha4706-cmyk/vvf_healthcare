@@ -108,7 +108,7 @@ export const createLead = async (req: AuthenticatedRequest, res: Response) => {
     const userId = req.user?.id;
     const userName = req.user?.name;
 
-    const { patient_name, contact_number, status, notes, callback_time, assigned_to } = req.body;
+    const { patient_name, contact_number, status, notes, callback_time, assigned_to, referral_type, referrer_name, appointment_type, service_type } = req.body;
 
     if (!patient_name || !contact_number) {
       return res.status(400).json({
@@ -122,15 +122,19 @@ export const createLead = async (req: AuthenticatedRequest, res: Response) => {
     const assignedId = assigned_to ? parseInt(assigned_to, 10) : userId;
 
     const result = await query(
-      `INSERT INTO leads (patient_name, contact_number, status, notes, callback_time, assigned_to)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      `INSERT INTO leads (patient_name, contact_number, status, notes, callback_time, assigned_to, referral_type, referrer_name, appointment_type, service_type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
       [
         patient_name,
         contact_number,
         status || 'Interested',
         notes || '',
         callback_time || null,
-        assignedId
+        assignedId,
+        referral_type || null,
+        referrer_name || null,
+        appointment_type || null,
+        service_type || null
       ]
     );
 
@@ -204,7 +208,7 @@ export const updateLead = async (req: AuthenticatedRequest, res: Response) => {
       });
     }
 
-    const { patient_name, contact_number, status, notes, callback_time, assigned_to } = req.body;
+    const { patient_name, contact_number, status, notes, callback_time, assigned_to, referral_type, referrer_name, appointment_type, service_type } = req.body;
 
     const newPatientName = patient_name !== undefined ? patient_name : lead.patient_name;
     const newContactNumber = contact_number !== undefined ? contact_number : lead.contact_number;
@@ -212,12 +216,16 @@ export const updateLead = async (req: AuthenticatedRequest, res: Response) => {
     const newNotes = notes !== undefined ? notes : lead.notes;
     const newCallbackTime = callback_time !== undefined ? callback_time : lead.callback_time;
     const newAssignedTo = assigned_to !== undefined ? (assigned_to ? parseInt(assigned_to, 10) : null) : lead.assigned_to;
+    const newReferralType = referral_type !== undefined ? referral_type : lead.referral_type;
+    const newReferrerName = referrer_name !== undefined ? referrer_name : lead.referrer_name;
+    const newAppointmentType = appointment_type !== undefined ? appointment_type : lead.appointment_type;
+    const newServiceType = service_type !== undefined ? service_type : lead.service_type;
 
     const result = await query(
       `UPDATE leads SET
-        patient_name = $1, contact_number = $2, status = $3, notes = $4, callback_time = $5, assigned_to = $6
-       WHERE id = $7 RETURNING *`,
-      [newPatientName, newContactNumber, newStatus, newNotes, newCallbackTime, newAssignedTo, leadId]
+        patient_name = $1, contact_number = $2, status = $3, notes = $4, callback_time = $5, assigned_to = $6, referral_type = $7, referrer_name = $8, appointment_type = $9, service_type = $10
+       WHERE id = $11 RETURNING *`,
+      [newPatientName, newContactNumber, newStatus, newNotes, newCallbackTime, newAssignedTo, newReferralType, newReferrerName, newAppointmentType, newServiceType, leadId]
     );
 
     const updatedLead = result.rows[0];

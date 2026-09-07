@@ -475,15 +475,30 @@ export const createAppointment = async (req: AuthenticatedRequest, res: Response
       notifyUserId = parseInt(technician_id, 10);
     }
 
+    let formattedAppDate = appointment_date;
+    try {
+      const d = new Date(appointment_date);
+      if (!isNaN(d.getTime())) {
+        formattedAppDate = d.toLocaleString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true
+        });
+      }
+    } catch (_) {}
+
     await createNotification(
       'New Appointment',
-      `Appointment created for ${patient_name} on ${appointment_date}.`,
+      `Appointment created for ${patient_name} on ${formattedAppDate}. (Appointment #${newAppointment.id})`,
       notifyUserId // Notify assigned doctor/dentist/technician specifically
     );
     // Also broadcast to admins
     await createNotification(
       'New Appointment',
-      `Appointment created for ${patient_name} on ${appointment_date}.`,
+      `Appointment created for ${patient_name} on ${formattedAppDate}. (Appointment #${newAppointment.id})`,
       null
     );
 

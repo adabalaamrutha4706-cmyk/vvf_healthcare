@@ -67,3 +67,30 @@ export const uploadProfile = multer({
     fileSize: maxFileSize
   }
 });
+
+const oxygenUploadBaseDir = path.join(__dirname, '../../uploads/oxygen');
+
+const oxygenStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dateStr = new Date().toISOString().split('T')[0];
+    const targetDir = path.join(oxygenUploadBaseDir, dateStr);
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+    cb(null, targetDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(null, `oxygen-${uniqueSuffix}${ext}`);
+  }
+});
+
+export const uploadOxygen = multer({
+  storage: oxygenStorage,
+  fileFilter: fileFilter,
+  limits: {
+    fileSize: maxFileSize
+  }
+});
+

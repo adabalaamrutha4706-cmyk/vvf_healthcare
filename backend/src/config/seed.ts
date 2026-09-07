@@ -61,6 +61,29 @@ export const seedDatabase = async () => {
         );
       `).catch((err) => console.error('Error creating auto_redistribution_log table:', err));
 
+      await query(`
+        CREATE TABLE IF NOT EXISTS oxygen_cylinders (
+          id SERIAL PRIMARY KEY,
+          container_type VARCHAR(50) NOT NULL,
+          movement_type VARCHAR(50) NOT NULL,
+          entry_datetime TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          bill_dc_no VARCHAR(100),
+          psi_pressure VARCHAR(100),
+          photo_url TEXT,
+          quantity INTEGER DEFAULT 1,
+          notes TEXT,
+          hospital_id INTEGER REFERENCES hospitals(id) ON DELETE SET NULL,
+          created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          created_by_name VARCHAR(255),
+          is_deleted BOOLEAN DEFAULT FALSE,
+          deleted_at TIMESTAMP WITH TIME ZONE,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+      `).catch((err) => console.error('Error creating oxygen_cylinders table:', err));
+      await query(`CREATE INDEX IF NOT EXISTS idx_oxygen_cylinders_type ON oxygen_cylinders(container_type);`).catch(() => {});
+      await query(`CREATE INDEX IF NOT EXISTS idx_oxygen_cylinders_movement ON oxygen_cylinders(movement_type);`).catch(() => {});
+
       // Add columns if they do not exist
       await query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_splits JSONB DEFAULT NULL;").catch(() => {});
       await query("ALTER TABLE payments ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;").catch(() => {});
@@ -85,6 +108,10 @@ export const seedDatabase = async () => {
       await query("ALTER TABLE field_appointments ADD COLUMN IF NOT EXISTS added_latitude DOUBLE PRECISION;").catch(() => {});
       await query("ALTER TABLE field_appointments ADD COLUMN IF NOT EXISTS added_longitude DOUBLE PRECISION;").catch(() => {});
       await query("ALTER TABLE field_appointments ADD COLUMN IF NOT EXISTS added_location_address TEXT;").catch(() => {});
+      await query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS referral_type VARCHAR(100);").catch(() => {});
+      await query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS referrer_name VARCHAR(255);").catch(() => {});
+      await query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS appointment_type VARCHAR(100);").catch(() => {});
+      await query("ALTER TABLE leads ADD COLUMN IF NOT EXISTS service_type VARCHAR(255);").catch(() => {});
 
     // Dynamic Alterations for Visit Verification Feature Columns
     await query("ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS latitude DOUBLE PRECISION;").catch(() => {});

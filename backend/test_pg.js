@@ -1,7 +1,7 @@
 const { Client } = require('pg');
 require('dotenv').config();
 
-const dbUrl = process.env.DATABASE_URL || 'postgresql://postgres:lms_password@localhost:5432/vvf_healthcare';
+const dbUrl = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/vvf_healthcare';
 
 async function testWithAws1() {
   console.log(`Testing connection to database...`);

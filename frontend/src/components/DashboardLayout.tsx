@@ -9,7 +9,7 @@ import {
   LayoutDashboard, Calendar, CreditCard, Building2, MapPin, 
   PhoneCall, Users2, Settings, LogOut, Bell, Menu, X, 
   Play, Square, Map, Moon, Sun, Clock, Home, CalendarDays, ClipboardCheck,
-  Camera, RefreshCw, Activity, BarChart3, Target, ChevronDown
+  Camera, RefreshCw, Activity, BarChart3, Target, ChevronDown, Gauge
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HeaderProfilePanel } from './HeaderProfilePanel';
@@ -27,6 +27,7 @@ const SIDEBAR_ITEMS: SidebarItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['Admin', 'Dental Doctor', 'Dentist Junior', 'Dental Assistant', 'Doctor', 'Reception', 'Telecaller', 'Executive', 'OP Technician', 'SOP Technician'] },
   { name: 'Clinical Worklist', href: '/clinical-worklists', icon: ClipboardCheck, roles: ['OP Technician', 'SOP Technician'] },
   { name: 'Appointments', href: '/appointments', icon: Calendar, roles: ['Admin', 'Doctor', 'Dental Doctor', 'Dentist Junior', 'Dental Assistant', 'Reception', 'Superadmin', 'OP Technician', 'SOP Technician'] },
+  { name: 'Oxygen Cylinders', href: '/oxygen-cylinders', icon: Gauge, roles: ['Admin', 'Doctor', 'Dental Doctor', 'Dentist Junior', 'Dental Assistant', 'Reception', 'Superadmin', 'OP Technician', 'SOP Technician'] },
   { name: 'Field leads', href: '/field-appointments', icon: CalendarDays, roles: ['Executive', 'Admin', 'Superadmin', 'Telecaller'] },
   { name: 'Attendance', href: '/attendance', icon: Clock, roles: ['Admin', 'Dental Doctor', 'Dentist Junior', 'Dental Assistant', 'Doctor', 'Reception', 'Telecaller', 'Executive', 'Superadmin', 'OP Technician', 'SOP Technician'] },
   { name: 'Field Visits', href: '/visits?type=field', icon: MapPin, roles: ['Admin', 'Executive', 'Superadmin'] },
@@ -100,6 +101,27 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
   const [photoError, setPhotoError] = useState('');
   const [sidebarWidth, setSidebarWidth] = useState<number>(256);
   const [isResizing, setIsResizing] = useState<boolean>(false);
+  const notifiedIdsRef = useRef<Set<number>>(new Set());
+  const [notificationPermission, setNotificationPermission] = useState<string>('default');
+
+  // Register Service Worker and initialize Mobile Notifications
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setNotificationPermission(Notification.permission);
+      
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch((err) => {
+          console.warn('Service worker registration failed:', err);
+        });
+      }
+
+      if (user && Notification.permission === 'default') {
+        Notification.requestPermission().then((perm) => {
+          setNotificationPermission(perm);
+        }).catch(() => {});
+      }
+    }
+  }, [user]);
 
   // Load saved sidebar width and login time on mount
   useEffect(() => {
@@ -246,7 +268,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
 
 
 
-  // Fetch notifications
+  // Fetch notifications & trigger Native Mobile Device Notifications
   useEffect(() => {
     if (user) {
       const fetchNotifications = async () => {
@@ -255,9 +277,46 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
             return;
           }
           const res = await api.dashboard.getNotifications();
-          setNotifications(res.notifications || []);
+          const fetchedNotifs = res.notifications || [];
+          setNotifications(fetchedNotifs);
+
+          // Trigger Native Mobile Device Push Notification for unread alerts
+          if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+            fetchedNotifs.forEach((n: any) => {
+              if (!n.is_read && !notifiedIdsRef.current.has(n.id)) {
+                notifiedIdsRef.current.add(n.id);
+
+                try {
+                  const notifTitle = n.title || 'VVF Healthcare Alert';
+                  const notifBody = n.message || '';
+
+                  // Trigger via Service Worker for Native Mobile Notification Tray
+                  const notifOptions: any = {
+                    body: notifBody,
+                    icon: '/logo.png',
+                    badge: '/logo.png',
+                    vibrate: [200, 100, 200, 100, 200],
+                    tag: `vvf-notif-${n.id}`,
+                    renotify: true,
+                    data: { url: window.location.href }
+                  };
+
+                  if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.ready.then((reg) => {
+                      reg.showNotification(notifTitle, notifOptions);
+                    }).catch(() => {
+                      new Notification(notifTitle, notifOptions);
+                    });
+                  } else {
+                    new Notification(notifTitle, notifOptions);
+                  }
+                } catch (err) {
+                  console.error('Mobile notification trigger error:', err);
+                }
+              }
+            });
+          }
         } catch (e: any) {
-          // Suppress authentication or cancellation logs during logout transitions
           if (e?.message && (e.message.includes('Authentication') || e.message.includes('token'))) {
             return;
           }
@@ -265,7 +324,7 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
         }
       };
       fetchNotifications();
-      const interval = setInterval(fetchNotifications, 20000); // refresh every 20s
+      const interval = setInterval(fetchNotifications, 15000); // Refresh every 15 seconds for rapid mobile alerts
       return () => clearInterval(interval);
     }
   }, [user]);
@@ -769,6 +828,26 @@ export const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ child
                       </div>
                     </div>
                     
+                    {notificationPermission !== 'granted' && (
+                      <div className="p-2.5 bg-emerald-50 border-b border-emerald-100 flex items-center justify-between gap-2 shrink-0">
+                        <p className="text-[10px] text-emerald-800 font-medium leading-tight">
+                          Enable phone alerts to get appointment & payment reminders directly on your mobile device.
+                        </p>
+                        <button
+                          onClick={() => {
+                            if ('Notification' in window) {
+                              Notification.requestPermission().then((perm) => {
+                                setNotificationPermission(perm);
+                              });
+                            }
+                          }}
+                          className="px-2.5 py-1 bg-[#059669] hover:bg-[#047857] text-white rounded-lg text-[10px] font-bold shrink-0 shadow-sm transition-all"
+                        >
+                          Enable Alerts
+                        </button>
+                      </div>
+                    )}
+
                     {/* List */}
                     <div className="overflow-y-auto divide-y divide-border-gray flex-1">
                       {notifications.length === 0 ? (

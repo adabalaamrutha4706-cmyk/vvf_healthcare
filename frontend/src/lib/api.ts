@@ -50,7 +50,7 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
   const role = getRole();
   
   let formattedEndpoint = endpoint;
-  if (!endpoint.startsWith('/auth') && !endpoint.startsWith('/superadmin')) {
+  if (!endpoint.startsWith('/auth') && !endpoint.startsWith('/superadmin') && !endpoint.startsWith('/oxygen-cylinders')) {
     let prefix = '';
     if (role) {
       const r = role.toLowerCase().trim();
@@ -296,6 +296,32 @@ export const api = {
     create: (data: any) => request('/leads', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: number, data: any) => request(`/leads/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: number) => request(`/leads/${id}`, { method: 'DELETE' })
+  },
+
+  // Oxygen Cylinders API
+  oxygen: {
+    getAll: (params?: { container_type?: string; movement_type?: string; search?: string; start_date?: string; end_date?: string }) => {
+      const queryParams = new URLSearchParams();
+      if (params) {
+        Object.entries(params).forEach(([key, val]) => {
+          if (val) queryParams.append(key, val);
+        });
+      }
+      const qs = queryParams.toString();
+      return request(`/oxygen-cylinders${qs ? `?${qs}` : ''}`);
+    },
+    getSummary: () => request('/oxygen-cylinders/summary'),
+    create: (body: FormData | any) =>
+      request('/oxygen-cylinders', {
+        method: 'POST',
+        body: body instanceof FormData ? body : JSON.stringify(body)
+      }),
+    update: (id: number, body: FormData | any) =>
+      request(`/oxygen-cylinders/${id}`, {
+        method: 'PUT',
+        body: body instanceof FormData ? body : JSON.stringify(body)
+      }),
+    delete: (id: number) => request(`/oxygen-cylinders/${id}`, { method: 'DELETE' })
   },
 
   // Superadmin API

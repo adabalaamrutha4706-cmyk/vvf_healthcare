@@ -22,6 +22,7 @@ import userRoutes from './routes/userRoutes';
 import dashboardRoutes from './routes/dashboardRoutes';
 import superadminRoutes from './routes/superadminRoutes';
 import therapyRoutes from './routes/therapyRoutes';
+import oxygenRoutes from './routes/oxygenRoutes';
 
 // Imports role routers
 import adminRoutes from './routes/adminRoutes';
@@ -122,6 +123,7 @@ app.use('/api/leads', leadRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/superadmin', superadminRoutes);
+app.use('/api/oxygen-cylinders', oxygenRoutes);
 
 // Role-based portals endpoints
 app.use('/api/admin/therapies', requireAuth, authorize(['Admin']), therapyRoutes);
@@ -167,6 +169,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 });
 
 import { expireOverdueVisits } from './controllers/visitController';
+import { processAppointmentAndPaymentNotifications } from './controllers/dashboardController';
 
 // Run migrations/seed and start server
 const startServer = async () => {
@@ -182,6 +185,12 @@ const startServer = async () => {
       setInterval(() => {
         expireOverdueVisits().catch(err => console.error('Background expiration run failed:', err));
       }, 5 * 60 * 1000);
+
+      // Background notification checker for 30-min appointment reminders & pending payments (every 1 min)
+      processAppointmentAndPaymentNotifications().catch(err => console.error('Initial notification process failed:', err));
+      setInterval(() => {
+        processAppointmentAndPaymentNotifications().catch(err => console.error('Background notification process failed:', err));
+      }, 60 * 1000);
     });
   } catch (err) {
     console.error('Failed to initialize and start backend server:', err);
